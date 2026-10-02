@@ -121,6 +121,15 @@ def steering_hints(target: Path) -> list[str]:
     return hints
 
 
+def relink_command(target: Path) -> str:
+    """リンクを張り直すコマンド。uv で入れた new-gamekit-project から呼ばれたときは、scaffold が一時的な場所にあって
+    終わると消えるので、このファイルのパスではなく、取り込みをもう一度実行するコマンドを示す（足りないリンクだけを作る）。"""
+    launcher = os.environ.get("GAMEKIT_LAUNCHER")
+    if launcher:
+        return f'{launcher} "{target}" --adopt'
+    return f"python3 {Path(__file__).resolve()} --relink {target}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="gamekit のゲームのプロジェクトを作る")
     ap.add_argument("target")
@@ -205,7 +214,7 @@ def main() -> None:
             print(f"  {step}. {hint}"); step += 1
         if conflicts:
             print(f"  {step}. CONFLICT のスキルは既存のものを残した。gamekit 版に揃えるなら、既存のものを消してから "
-                  f"`python3 {Path(__file__).resolve()} --relink {target}` を実行する"); step += 1
+                  f"`{relink_command(target)}` を実行する（足りないリンクだけを作る）"); step += 1
         print(f"  {step}. .gamekit/config.yaml の paths・engine・commands を既存の配置に合わせる"); step += 1
         print(f"  {step}. python3 skills/gamekit/gamekit-status/scripts/gamekit.py doctor で確かめる"); step += 1
         print(f"  {step}. /gamekit-bootstrap --adopt で、既存の資料から足りない成果物だけを作る"

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "new-gamekit-project"
+version = "0.1.0"
+description = "gamekit（AI と一緒にゲームを作るスキルセット）のゲームのプロジェクトを作り、Claude Code で立ち上げ（gamekit-bootstrap）を始めるコマンド"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+new-gamekit-project = "new_gamekit_project.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/new_gamekit_project"]

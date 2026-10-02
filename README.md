@@ -73,33 +73,42 @@ Spec Kit の標準スキル（`speckit-specify`、`speckit-clarify`、`speckit-p
 
 `gamekit-bootstrap` には、最初に一度だけ質問して以降を自動で進める `--oneshot` と、既存のプロジェクトの資料から足りない成果物だけを作る `--adopt` もある。
 
+## コマンドの導入と更新
+
+[speckit](https://github.com/sfukuda84/my-speckit-scaffold) の `new-speckit-project` と同じく、uv のツールとして入れる。
+
+```bash
+uv tool install "git+https://github.com/sfukuda84/gamekit#subdirectory=tool"   # 導入（初回だけ）
+uv tool upgrade new-gamekit-project                                                     # コマンドの更新
+new-gamekit-project update [プロジェクトのディレクトリ]                                   # 作成済みのプロジェクトに scaffold の新しい版を取り込む
+```
+
+- `new-gamekit-project` は、実行のたびに scaffold を GitHub から取得してプロジェクトを作る（`--ref` でブランチやタグ、`--repo` でリポジトリを指定できる）。
+- `update` は、scaffold の持ち物（スキル、ルールなど）だけを取り込み、1 つのコミットにする。scaffold のどの版とも中身が一致しないファイルは手で直したものとみなして上書きせず、新しい版を `.scaffold-new/` に置く。取り込みで残した同名のスキルにも触らない。`--dry-run` で、何が変わるかだけを見られる。
+- スキルを scaffold へのリンクで置いたプロジェクト（`--link`）は、スキルがすでに最新なので、`update` はリンクの外（ルールなど）だけを更新する。
+- 手元の scaffold（このリポジトリの clone）から使うときは、`scripts/new-gamekit-project` を直接実行するか、`--scaffold <ディレクトリ>` を付ける。`--link` は手元の scaffold を使うときだけ使える。
+- 以前に `~/.local/bin/new-gamekit-project` を `scripts/new-gamekit-project` へのシンボリックリンクで入れていたなら、リンクを消してから uv で入れる（`rm ~/.local/bin/new-gamekit-project`）。
+- オプションの一覧は [tool/README.md](tool/README.md) にある。
+
 ## 使い方
 
 ### 新しいゲーム
 
 ```bash
-python3 ~/.myai/scaffold/gamekit/scripts/new_project.py ~/games/my-game --title "仮題" --engine godot
-cd ~/games/my-game
-claude "/gamekit-bootstrap 借金を抱えた農家が、痩せた土を再生しながら村の経済を立て直す経営シム"
+new-gamekit-project ~/games/my-game --title "仮題" --engine godot -m "借金を抱えた農家が、痩せた土を再生しながら村の経済を立て直す経営シム"
 ```
 
-または、起動までまとめて行う。
-
-```bash
-ln -s ~/.myai/scaffold/gamekit/scripts/new-gamekit-project ~/.local/bin/   # 初回だけ
-new-gamekit-project ~/games/my-game --engine godot -m "1 文のコンセプト" --oneshot
-```
-
-- スキルはプロジェクトの `skills/` にコピーされる。`--link` を付けると、scaffold へのシンボリックリンクになる（scaffold の更新がすぐ反映される）。
+- プロジェクトを作り、Claude Code で `/gamekit-bootstrap <コンセプト>` を始める。`-m` を省くと対話でコンセプトを聞く。`--auto`・`--oneshot` を付けると、そのモードで始める。
+- スキルはプロジェクトの `skills/` にコピーされる。手元の scaffold を使い `--link` を付けると、scaffold へのシンボリックリンクになる（scaffold の更新がすぐ反映される）。コピーのプロジェクトは `new-gamekit-project update` で新しい版にする。
 - 立ち上げが終わったら `/gamekit-all` で `000-game-foundation` から 1 件ずつ進める。`/gamekit-all all --auto` で全機能を無人で進めることもできる（プレイ確認の `[人]` のタスクは残る）。
 
 ### 既存のプロジェクトに取り込む
 
 ```bash
-python3 ~/.myai/scaffold/gamekit/scripts/new_project.py ~/projects/private/game/metal --adopt --link
+new-gamekit-project ~/projects/private/game/metal --adopt
 ```
 
-- 既存のファイルは上書きしない。`.claude/skills/` などに同名のスキル（speckit をコピーで入れていたものなど）があれば残し、`CONFLICT` として表示する。gamekit 版に揃えるなら、既存のものを消してから `--relink` で張り直す。
+- 既存のファイルは上書きしない。`.claude/skills/` などに同名のスキル（speckit をコピーで入れていたものなど）があれば残し、`CONFLICT` として表示する。gamekit 版に揃えるなら、既存のものを消してから、手元の scaffold の `python3 scripts/new_project.py --relink <プロジェクト>` で張り直す。
 - 既存の `CLAUDE.md` などは上書きしないので、表示された行（`@.kiro/steering/game-development.md` など）を足す。
 - `.gamekit/config.yaml` の `paths`・`engine`・`commands` を既存の配置に合わせ、`gamekit.py doctor` で確かめる。
 - `/gamekit-bootstrap --adopt` で、既存の資料（企画書、システム設計、競合調査など）から足りない成果物だけを作る。元のファイルは動かさない。
@@ -141,15 +150,16 @@ python3 $B baseline       # 今の出力を基準値として記録する
 ├── .claude/skills/ .agents/skills/ .kiro/skills/   # → skills/*/* へのシンボリックリンク
 ├── skills/
 │   ├── speckit/                        # Spec Kit の標準スキル（10 本。編集しない）
-│   └── gamekit/                        # gamekit のスキル（21 本）
+│   └── gamekit/                        # gamekit のスキル（20 本）
 │       ├── gamekit-status/scripts/     #   gamekit.py（進捗・引き継ぎ書・診断）、gklib.py（共通ライブラリ）
 │       ├── gamekit-worktree/scripts/   #   worktree_helper.py（speckit 版の拡張）
 │       ├── gamekit-balance/scripts/    #   balance.py（目標値・調整値・シミュレーション・基準値）
 │       ├── gamekit-features/scripts/   #   validate.py（機能一式の検証）
 │       └── gamekit-design/scripts/     #   validate_design.py（デザインの要件の検証）
 ├── scripts/
-│   ├── new_project.py                  # プロジェクトを作る・既存のプロジェクトに取り込む
-│   └── new-gamekit-project             # 作って Claude Code で立ち上げを始める
+│   ├── new_project.py                  # プロジェクトを作る・既存のプロジェクトに取り込む・リンクを張り直す（--relink）
+│   └── new-gamekit-project             # 手元の scaffold から使うときの入口（本体は tool/）
+├── tool/                               # uv で入れるコマンド new-gamekit-project（作成・取り込み・update）とテスト
 └── THIRD_PARTY_NOTICES.md
 ```
 

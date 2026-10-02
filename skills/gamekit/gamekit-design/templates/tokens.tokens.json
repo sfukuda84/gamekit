@@ -1,0 +1,176 @@
+{
+  "$description": "デザイントークンの正本（DTCG 2025.10）。UI の色・文字・余白・演出の長さの値はここだけに書き、DESIGN.md・FEEL.md と実装はトークン名で参照する。ダークなどのテーマは tokens.<テーマ>.tokens.json に、ここにあるトークンの上書きだけを書く。ゲームの調整値（強さ、価格、確率）はトークンではなくマスタデータに置く。",
+  "color": {
+    "$type": "color",
+    "status": {
+      "danger": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.937,
+            0.267,
+            0.267
+          ],
+          "hex": "#ef4444"
+        }
+      },
+      "positive": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.204,
+            0.737,
+            0.396
+          ],
+          "hex": "#34bc65"
+        },
+        "$description": "回復、収入"
+      }
+    },
+    "ui": {
+      "surface": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.067,
+            0.075,
+            0.098
+          ],
+          "hex": "#111319"
+        },
+        "$description": "ウィンドウ、メニューの背景"
+      },
+      "text": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.937,
+            0.937,
+            0.922
+          ],
+          "hex": "#efefeb"
+        },
+        "$description": "本文"
+      },
+      "accent": {
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.976,
+            0.765,
+            0.212
+          ],
+          "hex": "#f9c336"
+        },
+        "$description": "選択中の項目、重要な数値"
+      }
+    },
+    "focus": {
+      "$value": "{color.ui.accent}",
+      "$description": "ゲームパッドで選んでいる項目の縁（強調の色を参照する）"
+    }
+  },
+  "font": {
+    "family": {
+      "$type": "fontFamily",
+      "base": {
+        "$value": [
+          "system-ui",
+          "sans-serif"
+        ]
+      }
+    },
+    "size": {
+      "$type": "dimension",
+      "body": {
+        "$value": {
+          "value": 1,
+          "unit": "rem"
+        }
+      },
+      "heading": {
+        "$value": {
+          "value": 1.5,
+          "unit": "rem"
+        }
+      },
+      "hud": {
+        "$value": {
+          "value": 1.25,
+          "unit": "rem"
+        }
+      }
+    },
+    "weight": {
+      "$type": "fontWeight",
+      "regular": {
+        "$value": 400
+      },
+      "bold": {
+        "$value": 700
+      }
+    }
+  },
+  "space": {
+    "$type": "dimension",
+    "1": {
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      }
+    },
+    "2": {
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      }
+    },
+    "3": {
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      }
+    },
+    "4": {
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      }
+    }
+  },
+  "radius": {
+    "$type": "dimension",
+    "default": {
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      }
+    }
+  },
+  "motion": {
+    "duration": {
+      "$type": "duration",
+      "short": {
+        "$value": {
+          "value": 100,
+          "unit": "ms"
+        },
+        "$description": "ボタンの反応、ヒットの光"
+      },
+      "medium": {
+        "$value": {
+          "value": 250,
+          "unit": "ms"
+        },
+        "$description": "ウィンドウの開閉"
+      },
+      "long": {
+        "$value": {
+          "value": 600,
+          "unit": "ms"
+        },
+        "$description": "取得や達成の演出（飛ばせるようにする）"
+      }
+    }
+  }
+}

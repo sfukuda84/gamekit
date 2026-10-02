@@ -1,0 +1,38 @@
+# gamekit のプロジェクト設定（gamekit.py init が作る）
+# パスはプロジェクトのルートからの相対パス。既存のプロジェクトに合わせて書き換えてよい（ファイルを動かさずに gamekit を使うため）。
+title:
+
+# エンジンと言語。gamekit-architecture（G8）が決めて書く。
+# engine: godot | web | other（other は Go のサーバーなど。commands を必ず埋める）
+engine:
+language:            # gdscript | csharp | typescript | go など
+
+paths:
+  concept: docs/concept          # core-concept.md, seed.md, direction.md, premises.md, backlog.md
+  research: docs/research        # competitors.md, competitors/
+  game: docs/game                # pillars.md, core-loop.md, systems.md, economy.md, progression.md, prototype/
+  balance: docs/balance          # targets.md, baseline/, reports/
+  feature: docs/feature          # 000-game-foundation.md, 001-*.md, 999-game-release.md, spec_order.md, README.md
+  design: docs/design            # DESIGN.md, EXPERIENCE.md, FEEL.md, tokens.tokens.json
+  playtest: docs/playtest
+  reviews: docs/reviews          # 機能の工程の外のレビュー
+  handover: docs/handover        # CURRENT_STATE.md, PITFALLS.md, sessions/
+  specs: specs
+  data: game/data                # マスタデータ（調整値の正本）。Godot なら game/data、Web なら src/data など
+  constitution: .specify/memory/constitution.md
+
+# コマンド。gamekit-architecture（G8）が埋める。空のものは、plan.md・quickstart.md・プロジェクトの設定ファイルから判断する。
+# プロジェクトのルートで実行する。
+commands:
+  test:                # 例: godot --headless -s addons/gut/gut_cmdln.gd -gexit / npm test
+  lint:                # 例: gdlint game / npm run lint
+  build:               # 例: godot --headless --export-release "macOS" build/game.app / npm run build
+  run_headless:        # 起動して数フレーム回し、エラーなく終わることを確かめる。例: godot --headless --quit-after 120
+  # バランスのシミュレーション。{scenario} と {out}（出力する JSON のパス）を置き換えて、シナリオごとに実行する。
+  # 出力の形式は gamekit-balance の §2（{"scenario", "seed", "metrics": {指標: 数値}}）。
+  balance_sim:         # 例: godot --headless --script res://tools/balance_sim.gd -- --scenario {scenario} --out {out}
+
+balance:
+  out_dir: build/balance          # シミュレーションの出力（コミットしない）
+  baseline_dir: docs/balance/baseline   # 基準値（コミットする）
+  tolerance: 0.05                 # 基準値との差の許容（相対。0.05 = 5%）

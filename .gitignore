@@ -81,3 +81,6 @@ build/balance/
 .claude/worktrees/
 CLAUDE.local.md
 .gemini/.env
+
+# gamekit の update が、手で直したファイルの新しい版を置く場所
+.scaffold-new/

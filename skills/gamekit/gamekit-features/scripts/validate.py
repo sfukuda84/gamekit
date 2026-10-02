@@ -6,6 +6,8 @@
     python3 validate.py <docs/feature のパス> --graph   # 被参照数と段階分けも表示
     python3 validate.py <docs/feature のパス> --lenient # 既存のプロジェクトへの取り込み用。エラーを警告に落とし、
                                                         # 番号のないファイル（NNN-slug.md でないもの）は検証の対象から外す
+    # README.md の「メタ文書（機能ファイルではない）」の表に載せたファイル（取り込みで残した元の資料など）は、
+    # --lenient がなくても機能ファイルとして検証しない
     python3 validate.py <docs/feature のパス> --backlog-file <backlog.md のパス>
     python3 validate.py <docs/feature のパス> --premises-file <premises.md のパス>
     python3 validate.py <docs/feature のパス> --targets-file <targets.md のパス>
@@ -130,12 +132,35 @@ def section_body(text: str, heading: str) -> str:
 
 
 all_slugs: set[str] = set()
+META_SECTION = "## メタ文書"
+LOCAL_LINK_RE = re.compile(r"\]\((?:\./)?([^/()#\s]+\.md)\)")
+
+
+def listed_meta_files(feature_dir: Path) -> set[str]:
+    """README.md の「メタ文書（機能ファイルではない）」の節に載っている、docs/feature 直下のファイル名。
+
+    取り込み（--adopt）で残した元の資料（例: 番号のない mvp1.md）をこの表に載せれば、機能ファイルとして検証しない。
+    """
+    path = feature_dir / "README.md"
+    if not path.exists():
+        return set()
+    names: set[str] = set()
+    inside = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            inside = line.startswith(META_SECTION)
+            continue
+        if inside and line.lstrip().startswith("|"):
+            first_cell = line.strip().strip("|").split("|")[0]
+            names.update(LOCAL_LINK_RE.findall(first_cell))
+    return names
 
 
 def load_features(feature_dir: Path) -> dict[str, dict]:
     features = {}
+    meta = META_FILES | listed_meta_files(feature_dir)
     for path in sorted(feature_dir.glob("*.md")):
-        if path.name in META_FILES:
+        if path.name in meta:
             continue
         slug = path.stem
         text = path.read_text(encoding="utf-8")

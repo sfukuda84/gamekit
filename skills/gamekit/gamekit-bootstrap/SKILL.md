@@ -126,6 +126,7 @@ $ARGUMENTS
    python3 <skills>/gamekit-features/scripts/validate.py docs/feature
    python3 <skills>/gamekit-design/scripts/validate_design.py docs/design
    python3 <skills>/gamekit-balance/scripts/balance.py targets
+   python3 <skills>/gamekit-balance/scripts/balance.py coverage
    $GK doctor
    ```
 
@@ -136,6 +137,7 @@ $ARGUMENTS
    - `docs/game/core-loop.md` のループと、`spec_order.md` の先頭の数件（垂直スライスでコアループが一周遊べるか）
    - `docs/game/prototype/results.md` で棄却・保留の仮説と、それに依存する機能（保留のまま進める機能は、機能概要にその旨があるか）
    - `docs/game/systems.md`・`economy.md`・`progression.md` と、`docs/balance/targets.md`（各目標値に根拠があり、シミュレーションのシナリオ名がそろっているか）
+   - `docs/game/pillars.md` の柱と `core-loop.md` の仮説が、targets.md の「柱と仮説の検算」で検算されているか（`balance.py coverage`。柱の約束を BT で表せるのに `プレイ確認` や `対象外` にしていないか）
    - `docs/architecture.md` と `.gamekit/config.yaml` の `engine`・`language`・`paths.data`・`commands`
    - `docs/architecture.md` の構成と、`docs/nfr.md` の目標値（その構成とエンジンで達成できるか）
    - 憲章と、`pillars.md`・`docs/architecture.md`・`docs/nfr.md`・`docs/design/` の参照

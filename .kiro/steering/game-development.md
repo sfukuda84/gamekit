@@ -11,7 +11,7 @@ inclusion: always
 1. **面白さを先に確かめる**: 機能を作り込む前に、コアループと主要な意思決定を `docs/game/core-loop.md` に書き、机上の検証（`gamekit-prototype`）で仮説を確かめる。検証していない仮説の上に機能を積まない。
 2. **デザインの柱と憲章が最上位**: `docs/game/pillars.md`（デザインの柱）と `.specify/memory/constitution.md`（憲章）をすべての判断の基準とする。機能の追加や変更が柱に反するときは、機能を変えるか、先に柱を見直す（`gamekit-core` の更新モード）。
 3. **仕様は「何を・なぜ」、計画は「どう作るか」**: `spec.md` にはプレイヤーの体験と要件を書き、エンジンや実装の詳細は `plan.md` に書く。
-4. **数値はデータに置く**: 敵の強さ、価格、成長曲線、確率などの調整値は、コードに直接書かず、マスタデータ（`.gamekit/config.yaml` の `paths.data`）に置く。機能ごとの調整値は `specs/<NNN>/tuning.md` に、全体の目標値は `docs/balance/targets.md` に書き、`gamekit-balance` で検算する。
+4. **数値はデータに置く**: 敵の強さ、価格、成長曲線、確率などの調整値は、コードに直接書かず、マスタデータ（`.gamekit/config.yaml` の `paths.data`）に置く。機能ごとの調整値は `specs/<NNN>/tuning.md` に、全体の目標値は `docs/balance/targets.md` に書き、`gamekit-balance` で検算する。デザインの柱とコアループの仮説は、それぞれ何で検算するか（目標値・プレイ確認・対象外）を targets.md の「柱と仮説の検算」に決め、`balance.py coverage` で抜けを確かめる。目標値がすべて PASS でも、柱を表す目標値がなければ柱の崩れに気づけない。
 5. **曖昧さは推測で埋めない**: 決まっていないことは `[NEEDS CLARIFICATION: ...]` として明示し、質問で解消する。自動モード（`--auto`、`--oneshot`）では、推奨案を明示して採用し、`auto-decisions.md` に記録することで確認に代える。
 6. **成果物と実装を同期させる**: 実装中やバランス検証で設計の誤りが見つかったら、コードやデータだけを直さず、`spec.md`・`tuning.md`・`docs/game/`・`docs/balance/targets.md` にも反映する。
 7. **手触りは人が確かめる**: 操作の気持ちよさ、読みやすさ、難しさの感じ方は、AI のレビューだけで合格にしない。実機でのプレイ確認は `[人]` のタスクにする（下の「人が行うタスク」）。
@@ -30,7 +30,7 @@ inclusion: always
 | G4 | `gamekit-sparring` | `docs/concept/premises.md`（GP1〜GP12）、`docs/concept/backlog.md` |
 | G5 | `gamekit-core` | `docs/game/pillars.md`（デザインの柱）、`docs/game/core-loop.md`（コアループ） |
 | G6 | `gamekit-prototype` | `docs/game/prototype/`（検証の計画、仮説、机上検証の結果） |
-| G7 | `gamekit-systems` | `docs/game/systems.md`、`economy.md`、`progression.md`、`docs/balance/targets.md` |
+| G7 | `gamekit-systems` | `docs/game/systems.md`、`economy.md`、`progression.md`、`docs/balance/targets.md`（目標値と「柱と仮説の検算」） |
 | G8 | `gamekit-architecture` | `docs/architecture.md`（エンジンと構成）、`.gamekit/config.yaml` の `engine` と `commands` |
 | G9 | `speckit-constitution` | `.specify/memory/constitution.md` |
 | G10 | `gamekit-features` | `docs/feature/`（機能概要 `001-*.md` 以降、`README.md`、`spec_order.md`） |
@@ -73,7 +73,7 @@ inclusion: always
 |---|---|
 | Standards | エンジンの作法、性能（毎フレームの割り当て、不要な処理）、決定性（乱数のシード）、型安全、コードの匂い |
 | Spec | `spec.md`・`ui.md`・`tuning.md`・`plan.md`・憲章・デザインの柱との整合、仕様外の追加 |
-| Balance | 数値がデータにあるか（直書きがないか）、目標値（`docs/balance/targets.md`）を満たすか、支配戦略と抜け道、経済の入口と出口の釣り合い |
+| Balance | 数値がデータにあるか（直書きがないか）、目標値（`docs/balance/targets.md`）を満たすか、柱を表す目標値があるか（`balance.py coverage`）、支配戦略と抜け道、経済の入口と出口の釣り合い |
 | Feel | 入力から反応までの遅れ、フィードバック（音・演出）、読みやすさ、難しさの段差、アクセシビリティ（`docs/design/FEEL.md`、`EXPERIENCE.md`） |
 | Originality | 参考作品と、名前・用語・テキスト・アセット・特徴的な仕組みの組み合わせが一致していないか（Web で確かめる） |
 
@@ -102,6 +102,12 @@ AI は `[人]` のタスクを実行せず、自動モードでも `- [x]` に�
 ## ほかの機能の一部だけを先に作る（`--until`・`--partial`）
 
 ある機能の前提として、別の機能の一部（例: 001 の Phase 1 の品質ゲート）だけを先に入れたいときは、`gamekit-coding <機能> --until "Phase N"` で、`tasks.md` のその Phase までを実装して止め、`$HELPER finish <機能> --phase coding --partial` で `main` に入れる。件名は `merge(<機能>): partial` になり、その機能の進捗（S8 以降）は進まない。残りは後で同じ `gamekit-coding <機能>` で続ける（S8 から）。`status` の実装の列に「一部をマージ済み」と出る。
+
+## 既存のプロジェクトへの取り込み
+
+既存のプロジェクトには `new-gamekit-project <dir> --adopt` で gamekit を入れ、`gamekit-bootstrap --adopt` で既存の資料から成果物を作る（計画は `docs/adopt-plan.md`）。元の資料は動かさない・消さない・書き換えない。
+
+- 取り込む前に Spec Kit で仕様化した機能には、`ui.md` と `tuning.md` がないことがある。`gamekit-coding`・`gamekit-all` の S1 で `ensure` が `MISSING_ARTIFACTS` を出したら、S8 の前に作る（`ui.md` は `gamekit-design` §3、`tuning.md` は `gamekit-balance` の spec モード）。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま）。
 
 ## モード
 

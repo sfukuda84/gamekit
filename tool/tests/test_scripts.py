@@ -18,6 +18,7 @@ SKILLS = SCAFFOLD / "skills" / "gamekit"
 HELPER = SKILLS / "gamekit-worktree" / "scripts" / "worktree_helper.py"
 VALIDATE_DESIGN = SKILLS / "gamekit-design" / "scripts" / "validate_design.py"
 GAMEKIT = SKILLS / "gamekit-status" / "scripts" / "gamekit.py"
+BALANCE = SKILLS / "gamekit-balance" / "scripts" / "balance.py"
 DESIGN_TEMPLATES = SKILLS / "gamekit-design" / "templates"
 
 GIT_ENV = {
@@ -207,6 +208,100 @@ class GamekitCheckpointTest(RepoCase):
         proc = self.gk("checkpoint", "G1", "x")
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("--allow-empty", proc.stderr)
+
+
+class MissingArtifactsTest(RepoCase):
+    def test_ensure_reports_missing_ui_and_tuning_for_specified_feature(self) -> None:
+        name = "001-core"
+        # Spec Kit で仕様化してから取り込んだ機能（tasks.md はあるが ui.md・tuning.md がない）
+        self.write_specs(self.repo, name, "- [ ] T001 実装\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "spec")
+        proc = helper(self.repo, "ensure", name, "--phase", "coding")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("MISSING_ARTIFACTS: ui.md tuning.md", proc.stdout)
+        state = helper(self.repo, "state", name, "--phase", "all")
+        self.assertIn("MISSING_ARTIFACTS: ui.md tuning.md", state.stdout)
+
+        wt = self.repo / ".worktrees" / name
+        (wt / "specs" / name / "ui.md").write_text("**対象**: UI なし\n", encoding="utf-8")
+        state = helper(self.repo, "state", name, "--phase", "coding")
+        self.assertIn("MISSING_ARTIFACTS: tuning.md", state.stdout)
+        (wt / "specs" / name / "tuning.md").write_text("調整値なし\n", encoding="utf-8")
+        state = helper(self.repo, "state", name, "--phase", "coding")
+        self.assertNotIn("MISSING_ARTIFACTS", state.stdout)
+
+    def test_spec_phase_and_unspecified_feature_do_not_report(self) -> None:
+        name = "002-new"
+        proc = helper(self.repo, "ensure", name, "--phase", "spec")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("MISSING_ARTIFACTS", proc.stdout)
+        proc = helper(self.repo, "state", name, "--phase", "all")
+        self.assertNotIn("MISSING_ARTIFACTS", proc.stdout)
+
+
+class CoverageTest(unittest.TestCase):
+    TARGETS_HEAD = (
+        "# バランスの目標値\n\n"
+        "| ID | 指標 | シナリオ | 下限 | 上限 | 根拠 | 機能 |\n|---|---|---|---|---|---|---|\n"
+        "| BT-001 | gold | early | 1 | - | economy.md | 全体 |\n\n"
+        "## 柱と仮説の検算\n\n| 対象 | 検算の方法 | 根拠 |\n|---|---|---|\n"
+        "| （例）柱 1 | BT-001 | 例 |\n"
+    )
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        (self.tmp / ".gamekit").mkdir()
+        (self.tmp / ".gamekit" / "config.yaml").write_text("title: t\n", encoding="utf-8")
+        game = self.tmp / "docs" / "game"
+        game.mkdir(parents=True)
+        (game / "pillars.md").write_text(
+            "# デザインの柱\n\n## 柱\n\n### 柱 1: 土が主役\n\n本文\n\n### 柱 2: 手が希少\n\n### 柱 3: 取り返しがつく\n",
+            encoding="utf-8")
+        (game / "core-loop.md").write_text(
+            "# コアループ\n\n## 主要な意思決定\n\n| ID | 意思決定 |\n|---|---|\n| D1 | 区画を選ぶ |\n\n"
+            "## 仮説\n\n| ID | 仮説 | 反証の条件 | 確かめ方の案 | 状態 |\n|---|---|---|---|---|\n"
+            "| H1 | 判断が成り立つ | 一択になる | MVP1 | 未検証 |\n| H2 | 塩害が起きる | 起きない | sim | 未検証 |\n"
+            "| H3 | | | | 未検証 |\n",
+            encoding="utf-8")
+        (self.tmp / "docs" / "balance").mkdir(parents=True)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def coverage(self, rows: str) -> subprocess.CompletedProcess:
+        (self.tmp / "docs" / "balance" / "targets.md").write_text(self.TARGETS_HEAD + rows, encoding="utf-8")
+        return run([sys.executable, str(BALANCE), "--root", str(self.tmp), "coverage"], self.tmp)
+
+    def test_missing_rows_and_unknown_bt_are_errors_playtest_and_exempt_are_info(self) -> None:
+        proc = self.coverage(
+            "| 柱 1 | BT-001 | gold が土の良さを表す |\n"
+            "| 柱 2 | プレイ確認（002 の T041） | 判断は遊んで確かめる |\n"
+            "| H1 | 対象外（MVP1 の範囲） | 001 では測れない |\n"
+            "| H2 | BT-099 | 存在しない |\n")
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        out = proc.stdout
+        self.assertIn("ERROR: 柱3: 「柱と仮説の検算」の表に行がない", out)
+        self.assertIn("BT-099", out)
+        self.assertRegex(out, r"ERROR: .*H2: 目標値の表にない BT")
+        self.assertRegex(out, r"INFO: .*柱2: プレイ確認だけで検算する")
+        self.assertRegex(out, r"INFO: .*H1: 対象外")
+        self.assertNotIn("H3", out)  # テンプレートの空の行は仮説に数えない
+        self.assertIn("pillars=3 hypotheses=2 covered_by_bt=1", out)
+
+    def test_all_covered_passes(self) -> None:
+        proc = self.coverage(
+            "| 柱 1 | BT-001 | a |\n| 柱 2 | BT-001 | b |\n| 柱 3 | プレイ確認（T041） | c |\n"
+            "| H1 | プレイ確認（MVP1） | d |\n| H2 | BT-001 | e |\n")
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("errors=0", proc.stdout)
+        self.assertIn("bt_rate=60%", proc.stdout)
+
+    def test_empty_method_is_error(self) -> None:
+        proc = self.coverage("| 柱 1 | | a |\n| 柱 2 | BT-001 | b |\n| 柱 3 | BT-001 | c |\n"
+                             "| H1 | BT-001 | d |\n| H2 | BT-001 | e |\n")
+        self.assertEqual(proc.returncode, 1)
+        self.assertRegex(proc.stdout, r"ERROR: .*柱1: 検算の方法が空か読めない")
 
 
 if __name__ == "__main__":

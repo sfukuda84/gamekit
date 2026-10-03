@@ -1,7 +1,7 @@
 ---
 name: "gamekit-coding"
 description: "ゲームの機能の実装工程を実行するスキル。Git worktree の準備（既存があれば再利用して続きから再開）、実装（speckit-implement。数値はマスタデータに置く）、仕様収束（speckit-converge）、バランス検証（gamekit-balance の verify。シミュレーションを回して目標値と突き合わせる）、5 軸レビュー（gamekit-review。Standards・Spec・Balance・Feel・Originality）と修正、再レビューと修正を行い、main へのマージ、引き継ぎ書の更新、後片付けまでを実行する。spec.md・tuning.md・plan.md・tasks.md が必要で、なければ gamekit-feature を案内する。「この機能を実装して」と言われたとき、または /gamekit-coding と打たれたときに使う。"
-argument-hint: "フィーチャー番号または範囲と、任意の --auto、--until \"Phase N\"、--weight（例: 001, 002-005, all, all --auto, 001 --until \"Phase 1\", 004 --weight 軽, または省略して次の未実装）"
+argument-hint: "フィーチャー番号または範囲と、任意の --auto、--until \"Phase N\"、--deferred [T045,T046]、--weight（例: 001, 002-005, all, all --auto, 001 --until \"Phase 1\", 000 --deferred T045,T046, 004 --weight 軽, または省略して次の未実装）"
 compatibility: "Requires git and Python 3.9+, spec-kit project structure with .specify/ and .gamekit/config.yaml"
 user-invocable: true
 disable-model-invocation: false
@@ -32,6 +32,19 @@ $ARGUMENTS
 3. S8 の `checkpoint` は記録しない（S8 は終わっていない）。区切りのコミットは trailer なしで作る。S9 以降は行わない。
 4. worktree の外で `$HELPER finish <FEATURE_NAME> --phase coding --partial` を実行して `main` に入れる（`gamekit-worktree` §3「一部だけを先にマージする」）。
 5. 完了報告で、実装した Phase と残りのタスクの件数、続きは `gamekit-coding <FEATURE_NAME>` で S8 から行うことを示す。
+
+### 後の段階のタスク（`--deferred`）
+
+引数に `--deferred [T045,T046]` があるときは、実装まで `main` にマージ済みの機能の、後の段階のタスク（`[後]`）を片付ける（steering「後の段階に回すタスク」、`gamekit-worktree` §3「後の段階のタスク」）。タスクの ID を省くと、未完了の `[後]` をすべて対象にする。単一のフィーチャーの指定とだけ組み合わせる。
+
+1. **S1**: `$HELPER ensure <feature> --phase deferred [--tasks T045,T046]`。`NO_DEFERRED_TASKS`（未完了の `[後]` がない）と `NOT_IMPLEMENTED`（実装がまだマージされていない。通常の `gamekit-coding` を案内する）で止まる。出力の `DEFERRED_TARGETS` が対象、`NEXT_STEP` が続きのステップ。作業場所は `WORKTREE_DIR`（`.worktrees/<feature>-deferred`）。
+2. **S8**: 対象のタスクだけを §3 の S8 の規則（テストファースト、数値はデータに、`decisions.md`）で実装し、`- [x]` にする。`[後]` の印は残す。対象外のタスクには手を付けない。
+3. **S9**: 対象のタスクと、その差分が触れた範囲で収束を確かめる（機能全体の照合はしない）。
+4. **S9-1**: 対象のタスクが `tuning.md` の調整値・目標値に関わるときだけ verify を行う。関わらなければ `--skipped "調整値に関わらない"` で記録する。
+5. **S10・S11**: `gamekit-review` を、機能の重さの規則と予算（§2.1）で行う。差分は `git diff main...HEAD`（後の段階の作業の分だけ）。S10 で CRITICAL・HIGH が 0 件なら、重さに関わらず S11 を `--skipped "S10 で CRITICAL・HIGH が 0 件"` で省いてよい。記録は `FEATURE_DIR/reviews/deferred-<RUN>-review-<n>.md`。
+6. 各ステップの記録は `$HELPER checkpoint <feature> <step> "<subject>" --phase deferred`（`Gamekit-Deferred-Step`。もとの機能の進捗は変えない）。
+7. **S12**: worktree の外で `$HELPER finish <feature> --phase deferred`。対象が `- [x]` でなければ `DEFERRED_TARGETS_UNCHECKED` で止まる。件名は `merge(<feature>): deferred` で、機能ファイルの状態を残りの `[人]`・`[後]` に合わせる。引き継ぎ書を更新する。
+8. **完了報告**: 片付けたタスク、テストとレビューの結果、残りの `[人]`・`[後]`（`HUMAN_TASKS_PENDING`・`DEFERRED_TASKS_PENDING`）。
 
 ## 2. 実行の流れ（単独実行）
 

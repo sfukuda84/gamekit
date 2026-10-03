@@ -65,6 +65,19 @@ HUMAN_MARKER = "[人]"
 DEFERRED_MARKER = "[後]"
 # 他の機能の前提として、一部の Phase だけを先にマージしたときの件名（finish --partial）。進捗の判定には使わない。
 PARTIAL_SUBJECT_RE = re.compile(r"^merge\(([^)]+)\): partial$", re.MULTILINE)
+# 後の段階のタスク（[後]）を、実装までマージ済みの機能で片付ける工程（--phase deferred）。
+# 進捗は Speckit-Step とは別の trailer で記録し、もとの機能の completed_steps（S2〜S11）を変えない。
+# マージの件名は merge(<name>): deferred で、MERGE_SUBJECT_RE（spec|coding|all）に入らないので進捗の判定に使わない。
+DEFERRED_STEPS = ["S8", "S9", "S9-1", "S10", "S11"]
+# 後の段階の作業は差分が小さいことが多いので、重さに関わらず省いてよいステップ
+# （S9-1 はその機能の調整値・目標値に関わらないとき、S11 は S10 で CRITICAL・HIGH が 0 件のとき）。
+DEFERRED_SKIPPABLE = ("S9-1", "S11")
+DEFERRED_SUFFIX = "-deferred"
+DEFERRED_STEP_RE = re.compile(r"^Gamekit-Deferred-Step:\s*(\S+)", re.MULTILINE)
+DEFERRED_TARGETS_RE = re.compile(r"^Gamekit-Deferred-Targets:\s*(.+)$", re.MULTILINE)
+DEFERRED_RUN_RE = re.compile(r"^Gamekit-Deferred-Run:\s*(\S+)", re.MULTILINE)
+DEFERRED_SUBJECT_RE = re.compile(r"^merge\(([^)]+)\): deferred$", re.MULTILINE)
+TASK_ID_RE = re.compile(r"^[ \t]*- \[([ xX])\] (T[0-9]+)\b")
 COMMIT_SEP = "\x1e"
 # 機能ファイルの状態欄（gamekit-features の様式）
 STATUS_SPECIFIED = "spec化済み（specs/{name}）"
@@ -466,7 +479,8 @@ def get_all_features() -> list[str]:
                 rest.add(line[len("specs/"):])
     if WORKTREES_DIR.is_dir():
         for child in WORKTREES_DIR.iterdir():
-            if child.is_dir():
+            # 後の段階の作業の worktree（<name>-deferred）は、フィーチャーとして数えない
+            if child.is_dir() and not child.name.endswith(DEFERRED_SUFFIX):
                 rest.add(child.name)
     rest.update(branch_features())
     return ordered + sorted(n for n in rest if n and n not in ordered)
@@ -605,7 +619,7 @@ def parse_args(args: list[str]) -> tuple[str | None, str | None, list[str]]:
             phase = args[i + 1] if i + 1 < len(args) else ""
             i += 2
             continue
-        if arg in ("--skip", "--weight", "--skipped"):  # 値を取るフラグ。値は flag_value で読む
+        if arg in ("--skip", "--weight", "--skipped", "--tasks"):  # 値を取るフラグ。値は flag_value で読む
             i += 2
             continue
         if arg.startswith("--phase="):
@@ -634,7 +648,7 @@ def positionals(args: list[str]) -> list[str]:
     i = 0
     while i < len(args):
         arg = args[i]
-        if arg in ("--phase", "--skip", "--weight", "--skipped"):
+        if arg in ("--phase", "--skip", "--weight", "--skipped", "--tasks"):
             i += 2
             continue
         if not arg.startswith("--"):
@@ -643,11 +657,14 @@ def positionals(args: list[str]) -> list[str]:
     return out
 
 
-def require_phase(phase: str | None) -> str:
+def require_phase(phase: str | None, allow_deferred: bool = False) -> str:
     if not phase:
-        raise HelperError("--phase spec|coding|all を指定してください。")
+        raise HelperError("--phase spec|coding|all|deferred を指定してください。")
+    if allow_deferred and phase == "deferred":
+        return phase
     if phase not in PHASE_STEPS:
-        raise HelperError(f"--phase には spec / coding / all のいずれかを指定してください（指定値: '{phase}'）。")
+        raise HelperError(f"--phase には spec / coding / all{' / deferred' if allow_deferred else ''} のいずれかを指定してください"
+                          f"（指定値: '{phase}'）。")
     return phase
 
 
@@ -694,7 +711,10 @@ def repo_is_dirty() -> bool:
 def cmd_ensure(args: list[str]) -> None:
     positional, phase, _ = parse_args(args)
     weight_override = flag_value(args, "--weight")
-    phase = require_phase(phase)
+    phase = require_phase(phase, allow_deferred=True)
+    if phase == "deferred":
+        deferred_ensure(resolve_feature(positional), flag_value(args, "--tasks"), weight_override)
+        return
     name = resolve_feature(positional)
     branch = branch_of(name)
     wt = worktree_of(name)
@@ -739,8 +759,13 @@ def cmd_ensure(args: list[str]) -> None:
 
 def cmd_state(args: list[str]) -> None:
     positional, phase, _ = parse_args(args)
-    phase = require_phase(phase)
+    phase = require_phase(phase, allow_deferred=True)
     name = resolve_feature(positional)
+    if phase == "deferred":
+        wt = deferred_worktree_of(name)
+        print_deferred_state(name, "present" if wt.is_dir() else "absent",
+                             resolve_weight(name, flag_value(args, "--weight"), wt if wt.is_dir() else None))
+        return
     wt = worktree_of(name)
     print_state(name, phase, "present" if wt.is_dir() else "absent",
                 resolve_weight(name, flag_value(args, "--weight"), wt if wt.is_dir() else None))
@@ -753,6 +778,9 @@ def cmd_checkpoint(args: list[str]) -> None:
     name = resolve_feature(pos[0])
     step, subject = pos[1], pos[2]
     skipped_reason = flag_value(args, "--skipped")
+    if parse_args(args)[1] == "deferred":
+        deferred_checkpoint(name, step, subject, skipped_reason, "--force" in args)
+        return
     if step not in ALL_STEPS:
         raise HelperError(f"ステップ '{step}' は不正です（有効値: {' '.join(ALL_STEPS)}）。")
     wt = worktree_of(name)
@@ -800,8 +828,11 @@ def cmd_checkpoint(args: list[str]) -> None:
 
 def cmd_finish(args: list[str]) -> None:
     positional, phase, flags = parse_args(args)
-    phase = require_phase(phase)
+    phase = require_phase(phase, allow_deferred=True)
     name = resolve_feature(positional)
+    if phase == "deferred":
+        deferred_finish(name, flags)
+        return
     branch = branch_of(name)
     wt = worktree_of(name)
     last = PHASE_LAST_STEP[phase]
@@ -914,22 +945,254 @@ def cmd_finish(args: list[str]) -> None:
         print("PARTIAL: 一部の Phase だけをマージした。残りは同じフィーチャーの gamekit-coding で続ける（進捗は S8 から）")
 
 
+# ---------------------------------------------------------------- 後の段階のタスク（--phase deferred）
+
+def deferred_branch_of(name: str) -> str:
+    return f"feature/{name}{DEFERRED_SUFFIX}"
+
+
+def deferred_worktree_of(name: str) -> Path:
+    return WORKTREES_DIR / f"{name}{DEFERRED_SUFFIX}"
+
+
+def deferred_branch_exists(name: str) -> bool:
+    return git_ok(["rev-parse", "--verify", "-q", f"refs/heads/{deferred_branch_of(name)}"])
+
+
+def deferred_branch_log(name: str) -> str:
+    """後の段階の作業のブランチにある、main にないコミットの本文。"""
+    if not deferred_branch_exists(name):
+        return ""
+    return git_out(["log", f"{MAIN_BRANCH}..{deferred_branch_of(name)}", "--format=%B"])
+
+
+def deferred_targets_recorded(name: str) -> list[str]:
+    """ensure が始めのコミットに記録した対象のタスク ID。"""
+    m = DEFERRED_TARGETS_RE.search(deferred_branch_log(name))
+    return m.group(1).split() if m else []
+
+
+def deferred_run_recorded(name: str) -> str:
+    m = DEFERRED_RUN_RE.search(deferred_branch_log(name))
+    return m.group(1) if m else ""
+
+
+def deferred_completed_steps(name: str) -> list[str]:
+    found = set(DEFERRED_STEP_RE.findall(deferred_branch_log(name)))
+    return [step for step in DEFERRED_STEPS if step in found]
+
+
+def deferred_next_step(name: str) -> str:
+    done = set(deferred_completed_steps(name))
+    for step in DEFERRED_STEPS:
+        if step not in done:
+            return step
+    return "S12"
+
+
+def deferred_runs_merged(name: str) -> int:
+    proc = run_git(["log", MAIN_BRANCH, "--format=%s"], check=False)
+    return sum(1 for n in DEFERRED_SUBJECT_RE.findall(proc.stdout) if n == name) if proc.returncode == 0 else 0
+
+
+def task_ids(lines: list[str]) -> list[str]:
+    ids = []
+    for line in lines:
+        m = TASK_ID_RE.match(line)
+        if m:
+            ids.append(m.group(2))
+    return ids
+
+
+def print_deferred_state(name: str, wt_state: str, weight: str) -> None:
+    print(f"REPO_ROOT: {REPO_ROOT}")
+    print(f"FEATURE_NAME: {name}")
+    print(f"BRANCH: {deferred_branch_of(name)}")
+    print(f"WORKTREE_DIR: {deferred_worktree_of(name)}")
+    print(f"WORKTREE_STATE: {wt_state}")
+    print("PHASE: deferred")
+    print(f"WEIGHT: {weight}")
+    print(f"RUN: {deferred_run_recorded(name)}")
+    print(f"DEFERRED_TARGETS: {' '.join(deferred_targets_recorded(name))}")
+    print(f"COMPLETED_STEPS: {' '.join(deferred_completed_steps(name))}")
+    print(f"NEXT_STEP: {deferred_next_step(name)}")
+
+
+def deferred_ensure(name: str, tasks_arg: str | None, weight_override: str | None) -> None:
+    branch = deferred_branch_of(name)
+    wt = deferred_worktree_of(name)
+    run_git(["worktree", "prune"])
+    requested = [t.strip() for t in (tasks_arg or "").split(",") if t.strip()]
+    if wt.is_dir() or deferred_branch_exists(name):
+        # 再開。対象は始めのコミットの記録に従う（--tasks が違えば止める）
+        recorded = deferred_targets_recorded(name)
+        if requested and sorted(requested) != sorted(recorded):
+            raise HelperError(f"{name} の後の段階の作業は、対象 {' '.join(recorded)} で始めています。"
+                              "対象を変えるなら、今の作業を finish するか abort してから始め直してください。")
+        if wt.is_dir():
+            current = worktree_branch(wt)
+            if current != branch:
+                raise HelperError(f"{wt} のブランチが '{current}' です（期待値: '{branch}'）。手動で確認してください。")
+            wt_state = "reused"
+        else:
+            info(f"==> 既存のブランチ {branch} に worktree を作り直します: {wt}")
+            git_passthrough(["worktree", "add", str(wt), branch])
+            wt_state = "reattached"
+    else:
+        if not coding_done(name):
+            raise Precondition(
+                "NOT_IMPLEMENTED",
+                f"{name} は実装まで {MAIN_BRANCH} にマージされていません。残りのタスクは gamekit-coding（--phase coding）で進めてください。",
+            )
+        pending = task_ids(split_deferred(main_tasks_text(name)))
+        if not pending:
+            raise Precondition("NO_DEFERRED_TASKS", f"{name} の {MAIN_BRANCH} の tasks.md に、未完了の {DEFERRED_MARKER} のタスクがありません。")
+        unknown = [t for t in requested if t not in pending]
+        if unknown:
+            raise HelperError(f"{' '.join(unknown)} は未完了の {DEFERRED_MARKER} のタスクではありません"
+                              f"（未完了の {DEFERRED_MARKER}: {' '.join(pending)}）。")
+        targets = requested or pending
+        if not git_ok(["check-ignore", "-q", ".worktrees/"]):
+            raise HelperError(".worktrees/ が .gitignore に登録されていません。'.worktrees/' を追加してコミットしてから再実行してください。")
+        if repo_is_dirty():
+            info(git_out(["status", "--short"]))
+            raise HelperError(f"{REPO_ROOT} に未コミットの変更があります。コミットまたは stash してから再実行してください。")
+        WORKTREES_DIR.mkdir(parents=True, exist_ok=True)
+        info(f"==> {MAIN_BRANCH} から {branch} と worktree を作成します: {wt}")
+        git_passthrough(["worktree", "add", "-b", branch, str(wt), MAIN_BRANCH])
+        run = str(deferred_runs_merged(name) + 1)
+        run_git(["commit", "-q", "--allow-empty", "-m", f"chore({name}): 後の段階のタスクの作業を始める（{' '.join(targets)}）",
+                 "-m", f"Gamekit-Deferred-Feature: {name}\nGamekit-Deferred-Run: {run}\n"
+                       f"Gamekit-Deferred-Targets: {' '.join(targets)}"], cwd=wt)
+        wt_state = "created"
+    (wt / ".specify").mkdir(parents=True, exist_ok=True)
+    with open(wt / FEATURE_JSON, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write('{\n  "feature_directory": "specs/%s"\n}\n' % name)
+    print_deferred_state(name, wt_state, resolve_weight(name, weight_override, wt))
+
+
+def deferred_checkpoint(name: str, step: str, subject: str, skipped_reason: str | None, force: bool) -> None:
+    if step not in DEFERRED_STEPS:
+        raise HelperError(f"後の段階の作業のステップ '{step}' は不正です（有効値: {' '.join(DEFERRED_STEPS)}）。")
+    wt = deferred_worktree_of(name)
+    if not wt.is_dir():
+        raise HelperError(f"worktree {wt} がありません。先に ensure --phase deferred を実行してください。")
+    if worktree_branch(wt) != deferred_branch_of(name):
+        raise HelperError(f"{wt} のブランチが '{worktree_branch(wt)}' です。")
+    if skipped_reason is not None:
+        if not skipped_reason.strip():
+            raise HelperError("--skipped には省いた理由を書いてください。")
+        if step not in DEFERRED_SKIPPABLE and not force:
+            raise HelperError(f"後の段階の作業では {step} を省けません（省けるステップ: {' '.join(DEFERRED_SKIPPABLE)}）。"
+                              "どうしても省くなら、理由を確かめたうえで --force を付けてください。")
+    stage_all(wt)
+    trailers = (f"Gamekit-Deferred-Step: {step}\nGamekit-Deferred-Feature: {name}\n"
+                f"Gamekit-Deferred-Run: {deferred_run_recorded(name) or '1'}")
+    if skipped_reason is not None:
+        trailers += f"\nGamekit-Skipped: {step} {' '.join(skipped_reason.split())}"
+    run_git(["commit", "-q", "--allow-empty", "-m", subject, "-m", trailers], cwd=wt)
+    print(f"CHECKPOINT: {step} {git_out(['rev-parse', '--short', 'HEAD'], cwd=wt)}"
+          + ("（省略）" if skipped_reason is not None else ""))
+    print(f"NEXT_STEP: {deferred_next_step(name)}")
+
+
+def deferred_finish(name: str, flags: list[str]) -> None:
+    branch = deferred_branch_of(name)
+    wt = deferred_worktree_of(name)
+    if not wt.is_dir():
+        raise HelperError(f"worktree {wt} がありません。")
+    cwd = Path.cwd().resolve()
+    if cwd == wt.resolve() or wt.resolve() in cwd.parents:
+        raise HelperError(f"finish は worktree の外（{REPO_ROOT}）で実行してください。")
+    missing = [s for s in DEFERRED_STEPS if s not in deferred_completed_steps(name)]
+    if missing:
+        raise HelperError(f"後の段階の作業のステップが記録されていません（未記録: {' '.join(missing)}。"
+                          f"省いたステップも --skipped で記録する）。")
+    tasks_file = wt / "specs" / name / "tasks.md"
+    targets = deferred_targets_recorded(name)
+    text = tasks_file.read_text(encoding="utf-8") if tasks_file.is_file() else ""
+    unchecked_targets = [t for t in targets
+                         if re.search(rf"^[ \t]*- \[ \] {re.escape(t)}\b", text, re.MULTILINE)]
+    if unchecked_targets:
+        raise Precondition(
+            "DEFERRED_TARGETS_UNCHECKED",
+            f"対象のタスク {' '.join(unchecked_targets)} が tasks.md でまだ未完了です。実装して - [x] にしてから再実行してください"
+            f"（{DEFERRED_MARKER} の印は残す）。",
+        )
+    # 残りの [人]・[後] に合わせて、機能ファイルの状態欄を更新する（実装後の状態どうしでだけ動かす）
+    status = status_after_coding(name, tasks_file)
+    for path in update_feature_status(wt, name, status, only_from=(STATUS_DONE, "人の作業待ち")):
+        info(f"==> 状態を更新しました: {path}")
+    stage_all(wt)
+    if not git_ok(["diff", "--cached", "--quiet"], cwd=wt):
+        status_only = all(line.split("\t")[-1].startswith("docs/feature/")
+                          for line in git_out(["diff", "--cached", "--name-only"], cwd=wt).splitlines())
+        if not status_only and "--commit-leftovers" not in flags:
+            files = git_out(["diff", "--cached", "--name-status"], cwd=wt)
+            run_git(["reset", "-q"], cwd=wt)
+            raise Precondition(
+                "LEFTOVER_CHANGES",
+                f"{wt} に、どのステップにも含まれていない変更があります。\n{files}\n"
+                "内容をユーザーに示し、マージに含めてよいと確認できたら --commit-leftovers を付けて再実行してください。",
+            )
+        run_git(["commit", "-q", "-m", f"docs({name}): 後の段階の作業の後の状態を記録",
+                 "-m", f"Gamekit-Deferred-Feature: {name}"], cwd=wt)
+    if repo_is_dirty():
+        info(git_out(["status", "--short"]))
+        raise HelperError(f"{REPO_ROOT} に未コミットの変更があるためマージできません。")
+    current = git_out(["rev-parse", "--abbrev-ref", "HEAD"])
+    if current != MAIN_BRANCH:
+        if "--switch" not in flags:
+            raise Precondition("NOT_ON_MAIN", f"{REPO_ROOT} のブランチが {current} です（マージ先は {MAIN_BRANCH}）。"
+                               "切り替えてよければ --switch を付けて再実行してください。")
+        run_git(["checkout", "-q", MAIN_BRANCH])
+    if git_ok(["merge-base", "--is-ancestor", branch, MAIN_BRANCH]):
+        info(f"==> {branch} はすでに {MAIN_BRANCH} にマージ済みです。片付けだけを行います。")
+    else:
+        info(f"==> {branch} を {MAIN_BRANCH} に --no-ff でマージします。")
+        try:
+            git_passthrough(["merge", "--no-ff", "-m", f"merge({name}): deferred", branch])
+        except HelperError as error:
+            raise HelperError(f"マージで競合しました。{REPO_ROOT} で解消してコミットし、もう一度 finish を実行してください。") from error
+    forget_history()
+    run_git(["worktree", "remove", "--force", str(wt)])
+    git_passthrough(["branch", "-d", branch])
+    print(f"FINISHED: {name} (deferred)")
+    print(f"MERGE_COMMIT: {git_out(['rev-parse', '--short', 'HEAD'])}")
+    print(f"FEATURE_STATUS: {status}")
+    push_after_merge()
+    main_text = main_tasks_text(name)
+    human = split_unchecked(main_text)[1]
+    rest = split_deferred(main_text)
+    if human:
+        print(f"HUMAN_TASKS_PENDING: {len(human)}")
+        for line in human:
+            print(f"  {line}")
+    if rest:
+        print(f"DEFERRED_TASKS_PENDING: {len(rest)}")
+        for line in rest:
+            print(f"  {line}")
+
+
+
 def cmd_abort(args: list[str]) -> None:
-    positional, _, flags = parse_args(args)
+    positional, phase, flags = parse_args(args)
     name = resolve_feature(positional)
-    branch = branch_of(name)
-    wt = worktree_of(name)
+    deferred = phase == "deferred"
+    branch = deferred_branch_of(name) if deferred else branch_of(name)
+    wt = deferred_worktree_of(name) if deferred else worktree_of(name)
     print(f"対象: {name}")
     if wt.is_dir():
         print(f"  削除する worktree: {wt}（未コミットの変更も失われます）")
-    if branch_exists(name):
+    has_branch = deferred_branch_exists(name) if deferred else branch_exists(name)
+    if has_branch:
         print(f"  削除するブランチ: {branch}（{MAIN_BRANCH} に未マージのコミットも失われます）")
     if "--yes" not in flags:
         print("確認のみ行いました。実行するには --yes を付けてください。")
         return
     if wt.is_dir():
         run_git(["worktree", "remove", "--force", str(wt)])
-    if branch_exists(name):
+    if has_branch:
         run_git(["branch", "-D", branch])
     run_git(["worktree", "prune"])
     print(f"ABORTED: {name}")
@@ -1011,6 +1274,9 @@ def cmd_status(_: list[str]) -> None:
         if not coding_done(name) and name in partial_merges(MAIN_BRANCH):
             coding_col += "（一部をマージ済み）"
         wt_col = f"あり（次: {next_step(name, 'all')}）" if worktree_of(name).is_dir() else "-"
+        if deferred_worktree_of(name).is_dir():
+            dwt = f"後の作業中（{' '.join(deferred_targets_recorded(name))}。次: {deferred_next_step(name)}）"
+            wt_col = dwt if wt_col == "-" else f"{wt_col}、{dwt}"
         skipped = skipped_steps(name)
         if skipped:
             spec_skipped = [s for s in skipped if s in SPEC_STEPS]
@@ -1041,7 +1307,9 @@ def cmd_deferred_tasks(args: list[str]) -> None:
     for name in names:
         deferred = deferred_pending_of(name)
         if deferred:
-            print(f"{name}:")
+            working = (f"（作業中: {deferred_worktree_of(name)}、対象 {' '.join(deferred_targets_recorded(name))}）"
+                       if deferred_worktree_of(name).is_dir() else "")
+            print(f"{name}:{working}")
             for line in deferred:
                 print(f"  {line}")
 
@@ -1143,7 +1411,17 @@ Commands:
         他の機能の前提として一部の Phase だけを先に入れるときに使う（進捗は進めない）
         どのステップにも含まれない変更があると止まる（--commit-leftovers で続行）。
         メインの作業ツリーが main 以外にいると止まる（--switch で main に切り替えて続行）
-  abort <feature> [--yes]
+  ensure|state <feature> --phase deferred [--tasks T045,T046] [--weight 軽|標準|重]
+        実装まで {MAIN_BRANCH} にマージ済みの機能の、後の段階のタスク（{DEFERRED_MARKER}）を片付ける worktree
+        （.worktrees/<feature>{DEFERRED_SUFFIX}、ブランチ feature/<feature>{DEFERRED_SUFFIX}）を作る・再開する。
+        --tasks を省くと未完了の {DEFERRED_MARKER} をすべて対象にする。DEFERRED_TARGETS と次のステップ（{' '.join(DEFERRED_STEPS)}）を表示する
+  checkpoint <feature> <step> <subject> --phase deferred [--skipped "<理由>" [--force]]
+        後の段階の作業のステップを記録する（trailer "Gamekit-Deferred-Step"。もとの機能の進捗は変えない）。
+        {' '.join(DEFERRED_SKIPPABLE)} は重さに関わらず省ける
+  finish <feature> --phase deferred [--commit-leftovers] [--switch]
+        対象のタスクが - [x] であることを確かめ、"merge(<feature>): deferred" の件名で {MAIN_BRANCH} にマージする。
+        機能ファイルの状態を残りの {HUMAN_MARKER}・{DEFERRED_MARKER} に合わせる。対象外の未完了のタスクでは止めない
+  abort <feature> [--phase deferred] [--yes]
         worktree とブランチを破棄する。--yes がなければ対象を表示するだけ
   list
         全フィーチャー名を着手順（spec_order.md の並び、その後に番号順）で表示する

@@ -136,7 +136,7 @@ python3 skills/gamekit/gamekit-status/scripts/gamekit.py checkpoint G5 "docs(boo
 
 ### 後の段階に回すタスクと、一部だけを先にマージする
 
-- **`[後]`**: 仕様で段階を分けると決めたタスク（垂直スライスに要らない分、ほかの機能の実装を待つ分など）には `tasks.md` で `[後]` を付け、「（いつ: …）」を書く。`finish` は `[人]` と同じく止まらずにマージし、`DEFERRED_TASKS_PENDING` で残りを示す。残りは `worktree_helper.py deferred-tasks` と `gamekit.py status` で見える。
+- **`[後]`**: 仕様で段階を分けると決めたタスク（垂直スライスに要らない分、ほかの機能の実装を待つ分など）には `tasks.md` で `[後]` を付け、「（いつ: …）」を書く。`finish` は `[人]` と同じく止まらずにマージし、`DEFERRED_TASKS_PENDING` で残りを示す。残りは `worktree_helper.py deferred-tasks` と `gamekit.py status` で見える。その段階が来たら `gamekit-coding <機能> --deferred [T045,T046]` で片付ける（実装までマージ済みの機能でも、専用の worktree `<機能>-deferred` で S8〜S11 を対象のタスクだけに行い、`merge(<機能>): deferred` でマージする。もとの機能の進捗は変えない）。
 - **`--until` と `--partial`**: ある機能の前提として、別の機能の一部の Phase だけを先に入れるときは、`/gamekit-coding 001 --until "Phase 1"` で実装し、`worktree_helper.py finish 001 --phase coding --partial` で `main` に入れる。件名は `merge(001): partial` で、001 の進捗は進まない（残りは後で `/gamekit-coding 001` で S8 から続ける）。
 
 ### バランスの確認

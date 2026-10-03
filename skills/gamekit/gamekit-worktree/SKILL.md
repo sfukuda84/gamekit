@@ -32,7 +32,10 @@ python3 <skills>/gamekit-worktree/scripts/worktree_helper.py <command> ...
 | `$HELPER state <feature> --phase spec\|coding\|all [--weight 軽\|標準\|重]` | 変更せずに進捗と機能の重さを表示する |
 | `$HELPER checkpoint <feature> <step> "<subject>" [--skipped "<理由>" [--force]]` | worktree の変更をすべてコミットし、ステップの完了を記録する。`--skipped` は、機能の重さで省いたステップとして記録する（trailer `Gamekit-Skipped`。完了として数える。重さで省けないステップは止まり、`--force` でだけ通す） |
 | `$HELPER finish <feature> --phase spec\|coding\|all [--allow-unchecked] [--commit-leftovers] [--switch] [--partial]` | S12 片付け。`main` に `--no-ff` でマージし、worktree とブランチを削除する。worktree の外で実行する。`--partial`（coding / all）は、最終ステップと未完了のタスクを確かめずに `merge(<feature>): partial` の件名でマージする（ほかの機能の前提として一部の Phase だけを先に入れるとき。進捗は進めない） |
-| `$HELPER abort <feature> [--yes]` | worktree とブランチを破棄する。`--yes` がなければ対象を表示するだけ |
+| `$HELPER ensure\|state <feature> --phase deferred [--tasks T045,T046]` | 実装まで `main` にマージ済みの機能の、後の段階のタスク（`[後]`）を片付ける worktree（`.worktrees/<feature>-deferred`、ブランチ `feature/<feature>-deferred`）を作る・再開する。`--tasks` を省くと未完了の `[後]` をすべて対象にする。出力に `DEFERRED_TARGETS`・`RUN`・`NEXT_STEP`（S8・S9・S9-1・S10・S11）。`[後]` がなければ `NO_DEFERRED_TASKS`、実装が未マージなら `NOT_IMPLEMENTED` で止まる（§3「後の段階のタスク」） |
+| `$HELPER checkpoint <feature> <step> "<subject>" --phase deferred [--skipped "<理由>"]` | 後の段階の作業のステップを記録する（trailer `Gamekit-Deferred-Step`・`Gamekit-Deferred-Run`。もとの機能の進捗〈`Speckit-Step`〉は変えない）。S9-1・S11 は重さに関わらず `--skipped` で省ける |
+| `$HELPER finish <feature> --phase deferred [--commit-leftovers] [--switch]` | 対象のタスクが `- [x]` であることを確かめ（未完了なら `DEFERRED_TARGETS_UNCHECKED`）、`merge(<feature>): deferred` の件名で `main` にマージする（進捗の判定には使わない）。機能ファイルの状態を残りの `[人]`・`[後]` に合わせる。対象外の未完了のタスクでは止めない |
+| `$HELPER abort <feature> [--phase deferred] [--yes]` | worktree とブランチを破棄する（`--phase deferred` で後の段階の作業のもの）。`--yes` がなければ対象を表示するだけ |
 | `$HELPER list` | 全フィーチャー名を着手順（`spec_order.md` の並び、その後に番号順）で表示する |
 | `$HELPER status` | 全フィーチャーの仕様・実装・worktree の状況と、残っている人のタスク（`[人]`）の件数を表示する。Pull Request などで取り込んだフィーチャーは `main` の `tasks.md` の完了状況で、Spec Kit 以前に実装した機能（`specs/` がなく、機能ファイルの状態欄が `実装済み` か `完了`）は状態欄で判定する。worktree を使わずに `NNN-slug` のブランチで作業中のフィーチャーも表示する（この 2 種類は `next` の候補にしない） |
 | `$HELPER deferred-tasks [<feature>]` | 残っている後の段階のタスク（`[後]`）を一覧する。読む `tasks.md` は `human-tasks` と同じ |
@@ -95,6 +98,8 @@ MISSING_ARTIFACTS: ui.md tuning.md
 | S10 | レビュー 1 回目と修正 | gamekit-coding | `fix(<FEATURE_NAME>): レビューの指摘を修正（1 回目）` |
 | S11 | レビュー 2 回目と修正 | gamekit-coding | `fix(<FEATURE_NAME>): レビューの指摘を修正（2 回目）` |
 | S12 | 片付け（`finish`） | 3 スキル共通 | `merge(<FEATURE_NAME>): <phase>`（自動。進捗の判定に使うため、この形は変えない） |
+
+**後の段階の作業（`--phase deferred`）**: 実装まで `main` にマージ済みの機能の `[後]` のタスクを片付けるときは、S8・S9・S9-1・S10・S11 を同じ名前で使い、trailer `Gamekit-Deferred-Step: <step>` と `Gamekit-Deferred-Run: <回>` で記録する（`Speckit-Step` は使わないので、もとの機能の進捗は変わらない）。S1 は `ensure --phase deferred`、S12 は `finish --phase deferred`（件名 `merge(<FEATURE_NAME>): deferred`）。S9-1 と S11 は重さに関わらず省ける（§3「後の段階のタスク」）。
 
 S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差し込んだステップである。speckit で作業を始め、これらの記録なしに後のステップへ進んだ worktree では、差し込んだステップは完了済みとみなされる（済んだ工程に戻らない。speckit から gamekit に取り込んだプロジェクトも同じ）。trailer（`Speckit-Step`、`Speckit-Feature`）は speckit と共通である。
 
@@ -178,8 +183,12 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 `[後]` のタスクは、マージの後、その段階（「いつ: …」に書いたもの）が来たら片付ける。規則はプロジェクトの steering（「後の段階に回すタスク」）に従う。
 
 1. `$HELPER deferred-tasks [<FEATURE_NAME>]` で残りを示す。
-2. その段階が来たら `gamekit-coding <FEATURE_NAME>` で実装する（S8 からやり直さず、残りのタスクだけを実装してよい。`[後]` の印は、実装して `- [x]` にするときに外さなくてよい）。
-3. `$HELPER sync-status <FEATURE_NAME>` で状態欄を合わせる。
+2. その段階が来たら `gamekit-coding <FEATURE_NAME> --deferred [T045,T046]` で片付ける（`gamekit-coding` §1「後の段階のタスク」）。実装までマージ済みの機能は `--phase coding` では `ALREADY_IMPLEMENTED` で止まるので、`--phase deferred` の専用の worktree で行う。
+   - S1: `$HELPER ensure <FEATURE_NAME> --phase deferred [--tasks T045,T046]`（新しい worktree `.worktrees/<FEATURE_NAME>-deferred`。始めのコミットに対象と回の番号を記録する。worktree が残っていれば続きから）
+   - S8〜S11: 対象のタスクだけを、S8 → S9 → S9-1 → S10 → S11 の順で行い、`checkpoint ... --phase deferred` で記録する（`Gamekit-Deferred-Step`。もとの機能の `Speckit-Step` の進捗は変えない）
+   - S12: worktree の外で `$HELPER finish <FEATURE_NAME> --phase deferred`（件名 `merge(<FEATURE_NAME>): deferred`。対象が `- [x]` でなければ止まる。機能ファイルの状態も合わせるので `sync-status` は要らない）
+3. **印の扱い**: 実装したタスクは `- [x]` にし、`[後]` の印は残す（いつ後回しにしたかの記録として。`[後]` の数え方は未完了のものだけなので、残しても数に入らない）。
+4. **打ち切り**: 後の段階の作業は差分が小さいことが多いので、機能の重さに関わらず次のステップを省いてよい（`--skipped` で記録する）。S9-1 は、対象のタスクがその機能の調整値・目標値（`tuning.md`）に関わらないとき。S11 は、S10 で CRITICAL・HIGH が 0 件だったとき。S8・S9・S10 は省けない。
 
 ### 一部だけを先にマージする（`--partial`）
 
@@ -234,6 +243,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 | なし | （空） | `$HELPER next --phase <phase>` の 1 件。空なら対象なしと報告する |
 | 自動モード | `--auto`、`002-005 --auto`、`--auto all` | 上のいずれかと組み合わせる。質問せずに推奨案を採用して進める（§6） |
 | モックを作る | `--with-mock`、`002 --with-mock --auto` | 上のいずれかと組み合わせる。S4-1 で、Claude Design のモックを作って案を選ぶ（`gamekit-design` のモックの節）。付けなければテキストの画面仕様だけを作る |
+| 後の段階のタスク | `000 --deferred`、`000 --deferred T045,T046` | `gamekit-coding` だけで使う。実装までマージ済みの機能の `[後]` のタスクを `--phase deferred` で片付ける（§3「後の段階のタスク」）。単一のフィーチャーの指定とだけ組み合わせる |
 | 重さを上書きする | `--weight 軽`、`003 --weight 重 --auto` | 上のいずれかと組み合わせる。機能ファイルの `**重さ**` の代わりに使う（§2「機能の重さ」） |
 
 - `--auto` と `--with-mock` は位置を問わない。フィーチャーの指定を解釈する前に取り除き、`$HELPER` には渡さない。`--weight <重さ>` も位置を問わず、`$HELPER` の `ensure`・`state`・`checkpoint` にはそのまま渡す。

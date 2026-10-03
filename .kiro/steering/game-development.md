@@ -121,7 +121,8 @@ AI は `[人]` のタスクを実行せず、自動モードでも `- [x]` に�
 - `[後]` にするのは、仕様（spec.md の Assumptions や Clarifications）で段階を分けると決めたタスクだけにする。実装が間に合わなかったタスクを `[後]` にしない（その場合は `--allow-unchecked` の確認を経る）。
 - `gamekit-worktree` の `finish` は、未完了が `[人]`・`[後]` だけなら止めずにマージし、`DEFERRED_TASKS_PENDING` で残りを示す。機能ファイルの状態は `完了（後の作業 N 件）` になる（`[人]` が残れば `人の作業待ち`）。
 - `speckit-converge`・`speckit-analyze`・`gamekit-review` は、未完了の `[後]` のタスクを実装漏れや不整合として扱わない。そのタスクと重なる新しいタスクも足さない。
-- 残りは `$HELPER deferred-tasks` と `gamekit-status` で確かめ、その段階が来たら `gamekit-coding <機能>` で片付ける（`- [x]` にして `sync-status` で状態を合わせる）。
+- 残りは `$HELPER deferred-tasks` と `gamekit-status` で確かめ、その段階が来たら `gamekit-coding <機能> --deferred [T045,T046]` で片付ける。実装までマージ済みの機能は、専用の worktree（`.worktrees/<機能>-deferred`、ブランチ `feature/<機能>-deferred`）で S8〜S11 を対象のタスクだけに行い、`merge(<機能>): deferred` の件名でマージする。進捗は別の trailer（`Gamekit-Deferred-Step`）で記録し、もとの機能の進捗は変えない。
+- 片付けたタスクは `- [x]` にし、`[後]` の印は残す（後回しにした記録として）。後の段階の作業は差分が小さいことが多いので、機能の重さに関わらず、S9-1（調整値・目標値に関わらないとき）と S11（S10 で CRITICAL・HIGH が 0 件のとき）を省いてよい。
 
 ## ほかの機能の一部だけを先に作る（`--until`・`--partial`）
 

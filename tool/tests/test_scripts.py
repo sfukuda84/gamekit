@@ -401,3 +401,116 @@ class ValidateWeightTest(unittest.TestCase):
         write_feature(self.tmp, "001-foo", "標準")
         out = self.validate()
         self.assertNotIn("重さ", out.stdout + out.stderr)
+
+
+class DeferredPhaseTest(RepoCase):
+    """実装までマージ済みの機能の、後の段階のタスク（[後]）を --phase deferred で片付ける。"""
+
+    name = "001-foo"
+    DSTEPS = ["S8", "S9", "S9-1", "S10", "S11"]
+
+    def merge_feature(self, tasks: str) -> None:
+        proc = helper(self.repo, "ensure", self.name, "--phase", "all")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        wt = self.repo / ".worktrees" / self.name
+        self.write_specs(wt, self.name, tasks)
+        for step in ALL_STEPS:
+            proc = helper(wt, "checkpoint", self.name, step, f"docs({self.name}): {step}")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        proc = helper(self.repo, "finish", self.name, "--phase", "all")
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+
+    def dwt(self) -> Path:
+        return self.repo / ".worktrees" / f"{self.name}-deferred"
+
+    def check_targets(self, ids: list[str]) -> None:
+        path = self.dwt() / "specs" / self.name / "tasks.md"
+        text = path.read_text(encoding="utf-8")
+        for tid in ids:
+            text = text.replace(f"- [ ] {tid} ", f"- [x] {tid} ")
+        path.write_text(text, encoding="utf-8")
+
+    TASKS = ("- [x] T001 済んだ\n"
+             "- [ ] T002 [US1] [後] 保存を作る（いつ: 003 の前）\n"
+             "- [ ] T003 [後] 置き換える（いつ: 001 の実装の後）\n"
+             "- [ ] T004 [人] プレイ確認（完了の確かめ方: 記録がある）\n")
+
+    def test_ensure_creates_worktree_with_targets_or_stops_without_deferred(self) -> None:
+        self.merge_feature(self.TASKS)
+        proc = helper(self.repo, "ensure", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("DEFERRED_TARGETS: T002 T003", proc.stdout)
+        self.assertIn(f"BRANCH: feature/{self.name}-deferred", proc.stdout)
+        self.assertIn("NEXT_STEP: S8", proc.stdout)
+        self.assertTrue(self.dwt().is_dir())
+        # 対象を絞る（別のリポジトリで）
+        other = RepoCase()
+        other.setUp()
+        try:
+            self.repo, saved = other.repo, self.repo
+            self.merge_feature(self.TASKS)
+            proc = helper(self.repo, "ensure", self.name, "--phase", "deferred", "--tasks", "T003")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("DEFERRED_TARGETS: T003", proc.stdout)
+        finally:
+            self.repo = saved
+            other.tearDown()
+
+    def test_no_deferred_tasks_is_precondition(self) -> None:
+        self.merge_feature("- [x] T001 済んだ\n- [ ] T004 [人] プレイ確認（完了の確かめ方: 記録がある）\n")
+        proc = helper(self.repo, "ensure", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 3, proc.stdout)
+        self.assertIn("NO_DEFERRED_TASKS", proc.stderr)
+
+    def test_checkpoint_does_not_change_original_progress_and_resumes(self) -> None:
+        self.merge_feature(self.TASKS)
+        before = helper(self.repo, "state", self.name, "--phase", "all").stdout
+        helper(self.repo, "ensure", self.name, "--phase", "deferred")
+        for step in ("S8", "S9"):
+            proc = helper(self.dwt(), "checkpoint", self.name, step, f"feat({self.name}): {step}", "--phase", "deferred")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        after = helper(self.repo, "state", self.name, "--phase", "all").stdout
+        self.assertEqual(
+            next(l for l in before.splitlines() if l.startswith("COMPLETED_STEPS")),
+            next(l for l in after.splitlines() if l.startswith("COMPLETED_STEPS")))
+        # 再開: worktree が残っていれば、続きのステップから
+        proc = helper(self.repo, "ensure", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("WORKTREE_STATE: reused", proc.stdout)
+        self.assertIn("COMPLETED_STEPS: S8 S9", proc.stdout)
+        self.assertIn("NEXT_STEP: S9-1", proc.stdout)
+        # S10 は省けない、S9-1・S11 は省ける
+        bad = helper(self.dwt(), "checkpoint", self.name, "S10", "x", "--phase", "deferred", "--skipped", "差分が小さい")
+        self.assertEqual(bad.returncode, 1)
+        ok = helper(self.dwt(), "checkpoint", self.name, "S9-1", "x", "--phase", "deferred", "--skipped", "調整値に関わらない")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        status = helper(self.repo, "status").stdout
+        self.assertIn("後の作業中（T002 T003。次: S10）", status)
+
+    def test_finish_merges_as_deferred_and_stops_on_unchecked_target(self) -> None:
+        self.merge_feature(self.TASKS)
+        helper(self.repo, "ensure", self.name, "--phase", "deferred", "--tasks", "T002")
+        for step in self.DSTEPS:
+            helper(self.dwt(), "checkpoint", self.name, step, f"feat({self.name}): {step}", "--phase", "deferred")
+        proc = helper(self.repo, "finish", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("DEFERRED_TARGETS_UNCHECKED", proc.stderr)
+        self.assertIn("T002", proc.stderr)
+        # 対象の T002 だけを完了にする。対象外の T003（[後]）と T004（[人]）は残っていても止めない
+        self.check_targets(["T002"])
+        git(self.dwt(), "add", "-A")
+        git(self.dwt(), "commit", "-qm", "feat: T002")
+        proc = helper(self.repo, "finish", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+        self.assertIn(f"FINISHED: {self.name} (deferred)", proc.stdout)
+        self.assertIn("DEFERRED_TASKS_PENDING: 1", proc.stdout)
+        self.assertIn("HUMAN_TASKS_PENDING: 1", proc.stdout)
+        self.assertIn(f"merge({self.name}): deferred", git(self.repo, "log", "-1", "--format=%s"))
+        self.assertFalse(self.dwt().exists())
+        tasks = (self.repo / "specs" / self.name / "tasks.md").read_text(encoding="utf-8")
+        self.assertIn("- [x] T002 [US1] [後]", tasks)  # 完了しても [後] の印は残す
+        # もとの機能の進捗は変わらず、次の後の段階の作業（T003）も始められる
+        proc = helper(self.repo, "ensure", self.name, "--phase", "deferred")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("DEFERRED_TARGETS: T003", proc.stdout)
+        self.assertIn("RUN: 2", proc.stdout)

@@ -55,6 +55,7 @@ $ARGUMENTS
 - 仕様工程の要約（clarify で確定した決定事項、調整仕様と目標値、analyze の検証結果）
 - 実装工程の要約（実装内容、テスト結果、converge の結果、バランス検証の結果、レビューで直した指摘）
 - 残っている `[人]` のタスク（プレイ確認など。`finish` の `HUMAN_TASKS_PENDING`）と、片付けた後の手順（`gamekit-worktree` §3「人のタスクの片付け」）
+- 残っている `[後]` のタスク（`finish` の `DEFERRED_TASKS_PENDING`）と、それぞれをいつ行うか（`gamekit-worktree` §3「後の段階のタスク」）
 - 飛ばした、または中断したフィーチャーとその理由
 - `--auto` のとき: 自動で採用した判断の要約（`auto-decisions.md`）と、止まったフィーチャーについてユーザーに判断してほしい事項
 - 次の案内: `$HELPER next --phase all` の結果。最初の垂直スライス（`docs/feature/spec_order.md` で印のある範囲）を終えたときは、プレイ確認とコアループの仮説の見直し（`gamekit-prototype` の更新モード）を勧める

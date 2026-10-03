@@ -99,7 +99,7 @@ disable-model-invocation: false
 - `docs/concept/premises.md`（様式: [templates/premises.md](./templates/premises.md)）
 - `docs/concept/backlog.md`（様式: [templates/backlog.md](./templates/backlog.md)。既存の候補は消さず、状態だけを変える）
 
-終わったら `gamekit-bootstrap` §3 の形で `G4` を記録する（単独で実行したときも記録する）。
+終わったら `gamekit-bootstrap` §3 のコマンド（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G4 "<subject>" --allow-empty`）で `G4` を記録する（単独で実行したときも記録する）。
 
 ## 5. 完了報告
 

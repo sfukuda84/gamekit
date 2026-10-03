@@ -72,8 +72,7 @@ disable-model-invocation: false
 `gamekit-bootstrap` から呼ばれたときは、bootstrap がコミットする。単独で実行したときも同じ形で記録する（bootstrap の再開の判定に使うため）。
 
 ```bash
-git add -A
-git commit --allow-empty -m "docs(bootstrap): G5 デザインの柱とコアループを定義" -m "Gamekit-Bootstrap: G5"
+python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G5 "docs(bootstrap): G5 デザインの柱とコアループを定義" --allow-empty
 ```
 
 更新モード・取り込みのときは、subject を `docs(game): デザインの柱とコアループを更新` にし、trailer を付けない（G5 の完了はすでに記録されている。まだ記録がない取り込みでは、上の形で記録する）。

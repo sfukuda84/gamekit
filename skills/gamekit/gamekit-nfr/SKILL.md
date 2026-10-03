@@ -53,7 +53,7 @@ $ARGUMENTS
 | `docs/feature/premises.md` | 「基盤の候補」（振り先が 999）の「結果」を書く |
 | `.specify/memory/constitution.md` | `docs/nfr.md` を参照する条項がなければ、`speckit-constitution` の手順で足す |
 
-終わったら、`gamekit-bootstrap` §3 の形で G12 を記録する（`docs(bootstrap): G12 非機能要件とリリース基盤を定義`、trailer `Gamekit-Bootstrap: G12`）。単独で実行したときも記録する。更新モードで直しただけのときは、`docs(nfr): <変更の要約>` の通常のコミットにする。
+終わったら、`gamekit-bootstrap` §3 のコマンドで G12 を記録する（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G12 "docs(bootstrap): G12 非機能要件とリリース基盤を定義" --allow-empty`）。単独で実行したときも記録する。更新モードで直しただけのときは、`docs(nfr): <変更の要約>` の通常のコミットにする。
 
 `docs/nfr.md` か `999-*` がすでにある場合は、**更新モード**として §4 に従う。**`docs/feature/` にすでに `999-*` がある場合**（`999-game-release.md` のほか、speckit の `999-app-nfr.md` など）は、新しく作らず、その名前のまま使う。以下の `999-game-release` は、その名前に読み替える。`999-*` が複数あるときは、どれをリリース基盤にするかをユーザーに確かめる（自動モードでは止まる）。
 

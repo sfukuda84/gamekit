@@ -72,7 +72,7 @@ $ARGUMENTS
 
 `docs/concept/seed.md`（様式: [templates/seed.md](./templates/seed.md)）
 
-仮題を決めたら、`.gamekit/config.yaml` の `title` が空なら書く。終わったら `gamekit-bootstrap` §3 の形で `G1` を記録する（単独で実行したときも記録する）。
+仮題を決めたら、`.gamekit/config.yaml` の `title` が空なら書く。終わったら `gamekit-bootstrap` §3 のコマンド（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G1 "<subject>" --allow-empty`）で `G1` を記録する（単独で実行したときも記録する）。
 
 ## 4. 完了報告
 

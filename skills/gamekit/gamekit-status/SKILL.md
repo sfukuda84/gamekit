@@ -28,13 +28,13 @@ python3 <skills>/gamekit-status/scripts/gamekit.py [--root <dir>] <command> ...
 | `$GK handover [--note <text>]` | 引き継ぎ書を更新する（§3）。コミットはしない |
 | `$GK doctor` | 設定と環境を診断し、`OK` / `WARN` / `ERROR` の行と `SUMMARY` を出す（§4）。ERROR があれば終了コード 1 |
 
-機能の工程の細かい操作（`next`、`human-tasks`、`sync-status`、`abort`）は [`gamekit-worktree`](../gamekit-worktree/SKILL.md) の `$HELPER` で行う。
+機能の工程の細かい操作（`next`、`human-tasks`、`deferred-tasks`、`sync-status`、`abort`）は [`gamekit-worktree`](../gamekit-worktree/SKILL.md) の `$HELPER` で行う。
 
 ## 2. 進捗の判定
 
 | 工程 | 記録 | 判定 |
 |---|---|---|
-| ゲームの工程（G1〜G14） | `gamekit-bootstrap` のコミットの trailer `Gamekit-Bootstrap: G<n>` | `$GK bootstrap` |
+| ゲームの工程（G1〜G14） | `$GK checkpoint G<n> "<subject>"` のコミットの trailer `Gamekit-Bootstrap: G<n>`（trailer は最後の段落にあるものだけが読まれるので、コミットを手で書かない） | `$GK bootstrap` |
 | 機能の工程（S2〜S11） | `checkpoint` のコミットの trailer `Speckit-Step: <step>` と `Speckit-Feature: <name>`（speckit と共通） | `gamekit-worktree` の `$HELPER state` / `status` |
 | バランス | `docs/balance/reports/*.md` と `specs/*/balance-report.md` のうち最新のもの | `$GK status` |
 
@@ -46,7 +46,7 @@ speckit で進めていたプロジェクトに gamekit を取り込んだとき
 
 | ファイル | 書く人 | 中身 |
 |---|---|---|
-| `CURRENT_STATE.md` | 自動の節は `$GK handover`、ほかの節は人か AI | 今の目標、次にやること、判断待ち（手で書く）と、自動の節（更新日時とブランチ、ゲームの工程、バランス、機能の一覧、残っている `[人]` のタスク、見直しの優先度が「高」の自動判断、前回の引き継ぎ以降のコミット） |
+| `CURRENT_STATE.md` | 自動の節は `$GK handover`、ほかの節は人か AI | 今の目標、次にやること、判断待ち（手で書く）と、自動の節（更新日時とブランチ、ゲームの工程、バランス、機能の一覧、残っている `[人]` のタスク、残っている `[後]` のタスク、見直しの優先度が「高」の自動判断、前回の引き継ぎ以降のコミット） |
 | `sessions/<YYYYMMDD-HHMM>.md` | `$GK handover` | そのときの自動の節の写しと、`--note` のメモ。消さずに積み上げる |
 | `PITFALLS.md` | 人か AI | 踏んだ罠と避け方。新しいものを上に書く。`$GK` は変えない |
 

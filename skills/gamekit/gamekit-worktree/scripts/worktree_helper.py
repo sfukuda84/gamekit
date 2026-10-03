@@ -49,11 +49,16 @@ UNCHECKED_RE = re.compile(r"^[ \t]*- \[ \].*$", re.MULTILINE)
 CHECKED_RE = re.compile(r"^[ \t]*- \[[xX]\].*$", re.MULTILINE)
 # 人が行うタスクの印（steering の「人が行うタスク」）。未完了でも AI の実装漏れとして扱わない。
 HUMAN_MARKER = "[人]"
+# 後の段階に回すタスクの印（steering の「後の段階に回すタスク」）。未完了でも finish を止めず、AI の実装漏れとして扱わない。
+DEFERRED_MARKER = "[後]"
+# 他の機能の前提として、一部の Phase だけを先にマージしたときの件名（finish --partial）。進捗の判定には使わない。
+PARTIAL_SUBJECT_RE = re.compile(r"^merge\(([^)]+)\): partial$", re.MULTILINE)
 COMMIT_SEP = "\x1e"
 # 機能ファイルの状態欄（gamekit-features の様式）
 STATUS_SPECIFIED = "spec化済み（specs/{name}）"
 STATUS_DONE = "完了"
 STATUS_HUMAN_PENDING = "人の作業待ち（specs/{name}）"
+STATUS_DONE_DEFERRED = "完了（後の作業 {count} 件）"
 NEW_FEATURE_RE = re.compile(r"^[0-9]{3}-[a-z0-9][a-z0-9-]*$")
 STATUS_FIELD_RE = re.compile(r"\*\*状態\*\*:\s*([^|\n]+?)\s*(?:\||$)", re.MULTILINE)
 # Spec Kit を使う前に実装した機能の状態欄（specs/ を持たない）
@@ -218,9 +223,17 @@ def history(ref: str) -> tuple[dict[str, frozenset], frozenset]:
     return {k: frozenset(v) for k, v in steps.items()}, frozenset(merged)
 
 
+@functools.lru_cache(maxsize=None)
+def partial_merges(ref: str) -> frozenset:
+    """finish --partial で一部だけを ref にマージしたフィーチャー。"""
+    proc = run_git(["log", ref, "--format=%s"], check=False)
+    return frozenset(PARTIAL_SUBJECT_RE.findall(proc.stdout)) if proc.returncode == 0 else frozenset()
+
+
 def forget_history() -> None:
     """コミットやマージで履歴が変わった後に呼ぶ。"""
     history.cache_clear()
+    partial_merges.cache_clear()
     main_tasks_text.cache_clear()
     branch_features.cache_clear()
 
@@ -241,12 +254,21 @@ def coding_done(name: str) -> bool:
 
 
 def split_unchecked(text: str) -> tuple[list[str], list[str]]:
-    """未完了のタスク行を (AI のタスク, 人のタスク) に分けて返す。"""
+    """未完了のタスク行を (AI のタスク, 人のタスク) に分けて返す。後の段階に回したタスク（[後]）はどちらにも入れない。"""
     ai: list[str] = []
     human: list[str] = []
     for line in UNCHECKED_RE.findall(text):
-        (human if HUMAN_MARKER in line else ai).append(line.strip())
+        if HUMAN_MARKER in line:
+            human.append(line.strip())
+        elif DEFERRED_MARKER not in line:
+            ai.append(line.strip())
     return ai, human
+
+
+def split_deferred(text: str) -> list[str]:
+    """未完了の、後の段階に回したタスク（[後]。[人] でもあるものは人のタスクとして数えるので除く）。"""
+    return [line.strip() for line in UNCHECKED_RE.findall(text)
+            if DEFERRED_MARKER in line and HUMAN_MARKER not in line]
 
 
 def unchecked_tasks(tasks_file: Path) -> tuple[list[str], list[str]]:
@@ -261,10 +283,20 @@ def main_tasks_text(name: str) -> str:
     return proc.stdout if proc.returncode == 0 else ""
 
 
+def deferred_tasks(tasks_file: Path) -> list[str]:
+    if not tasks_file.is_file():
+        return []
+    return split_deferred(tasks_file.read_text(encoding="utf-8"))
+
+
 def status_after_coding(name: str, tasks_file: Path) -> str:
-    """実装を終えた後の状態。人のタスクが残っていれば 人の作業待ち、なければ 完了。"""
+    """実装を終えた後の状態。人のタスクが残っていれば 人の作業待ち、後の段階のタスクだけなら 完了（後の作業 N 件）、
+    どちらもなければ 完了。"""
     _, human = unchecked_tasks(tasks_file)
-    return STATUS_HUMAN_PENDING.format(name=name) if human else STATUS_DONE
+    if human:
+        return STATUS_HUMAN_PENDING.format(name=name)
+    deferred = deferred_tasks(tasks_file)
+    return STATUS_DONE_DEFERRED.format(count=len(deferred)) if deferred else STATUS_DONE
 
 
 def completed_steps(name: str, infer: bool = True) -> list[str]:
@@ -652,6 +684,9 @@ def cmd_finish(args: list[str]) -> None:
     branch = branch_of(name)
     wt = worktree_of(name)
     last = PHASE_LAST_STEP[phase]
+    partial = "--partial" in flags
+    if partial and phase == "spec":
+        raise HelperError("--partial は coding か all の工程でだけ使えます（仕様の一部だけをマージしない）。")
 
     if not wt.is_dir():
         raise HelperError(f"worktree {wt} がありません。")
@@ -661,18 +696,21 @@ def cmd_finish(args: list[str]) -> None:
         raise HelperError(f"finish は worktree の外（{REPO_ROOT}）で実行してください。`cd {REPO_ROOT}` してから再実行します。")
     done = completed_steps(name)
     missing = [step for step in PHASE_STEPS[phase] if step not in done]
-    if missing:
-        raise HelperError(f"{phase} 工程のステップが完了していません（未完了: {' '.join(missing)}）。")
+    if missing and not partial:
+        raise HelperError(f"{phase} 工程のステップが完了していません（未完了: {' '.join(missing)}）。"
+                          "他の機能の前提として一部の Phase だけを先にマージするなら --partial を付ける。")
     for filename in ("spec.md", "plan.md", "tasks.md"):
         if not (wt / "specs" / name / filename).is_file():
             raise HelperError(f"{wt / 'specs' / name / filename} がありません。")
     human_pending: list[str] = []
-    if phase in ("coding", "all"):
+    deferred_pending: list[str] = []
+    if phase in ("coding", "all") and not partial:
         remaining, human_pending = unchecked_tasks(wt / "specs" / name / "tasks.md")
+        deferred_pending = deferred_tasks(wt / "specs" / name / "tasks.md")
         if remaining and "--allow-unchecked" not in flags:
             raise Precondition(
                 "UNCHECKED_TASKS",
-                f"{name} の tasks.md に未完了のタスク（{HUMAN_MARKER} 以外）が {len(remaining)} 件あります。"
+                f"{name} の tasks.md に未完了のタスク（{HUMAN_MARKER}・{DEFERRED_MARKER} 以外）が {len(remaining)} 件あります。"
                 "一覧をユーザーに示し、残したままマージしてよいと確認できたら --allow-unchecked を付けて再実行してください。\n"
                 + "\n".join(remaining),
             )
@@ -717,7 +755,8 @@ def cmd_finish(args: list[str]) -> None:
     else:
         info(f"==> {branch} を {MAIN_BRANCH} に --no-ff でマージします。")
         try:
-            git_passthrough(["merge", "--no-ff", "-m", f"merge({name}): {phase}", branch])
+            # --partial は進捗の判定に使わない件名にする（MERGE_SUBJECT_RE は spec|coding|all だけを読む）
+            git_passthrough(["merge", "--no-ff", "-m", f"merge({name}): {'partial' if partial else phase}", branch])
         except HelperError as error:
             raise HelperError(
                 f"マージで競合しました。{REPO_ROOT} で競合を解消してマージをコミットし、"
@@ -735,7 +774,7 @@ def cmd_finish(args: list[str]) -> None:
     # 変更はすべてマージ済みで、残るのは無視対象のローカル状態だけなので --force で削除する。
     run_git(["worktree", "remove", "--force", str(wt)])
     git_passthrough(["branch", "-d", branch])
-    print(f"FINISHED: {name} ({phase})")
+    print(f"FINISHED: {name} ({'partial' if partial else phase})")
     if ignored:
         print(f"REMOVED_IGNORED: {' '.join(ignored)}")
     print(f"MERGE_COMMIT: {git_out(['rev-parse', '--short', 'HEAD'])}")
@@ -745,6 +784,13 @@ def cmd_finish(args: list[str]) -> None:
         print(f"HUMAN_TASKS_PENDING: {len(human_pending)}")
         for line in human_pending:
             print(f"  {line}")
+    if deferred_pending:
+        # 後の段階に回したタスクも止めずにマージし、残りを知らせる。
+        print(f"DEFERRED_TASKS_PENDING: {len(deferred_pending)}")
+        for line in deferred_pending:
+            print(f"  {line}")
+    if partial:
+        print("PARTIAL: 一部の Phase だけをマージした。残りは同じフィーチャーの gamekit-coding で続ける（進捗は S8 から）")
 
 
 def cmd_abort(args: list[str]) -> None:
@@ -783,15 +829,29 @@ def human_pending_of(name: str) -> list[str]:
     return split_unchecked(main_tasks_text(name))[1]
 
 
+def deferred_pending_of(name: str) -> list[str]:
+    """残っている後の段階のタスク。読む tasks.md の選び方は human_pending_of と同じ。"""
+    tasks_file = worktree_of(name) / "specs" / name / "tasks.md"
+    if tasks_file.is_file():
+        return deferred_tasks(tasks_file)
+    if name in branch_features():
+        return split_deferred(branch_tasks_text(name))
+    if git_out(["rev-parse", "--abbrev-ref", "HEAD"]) == MAIN_BRANCH:
+        return deferred_tasks(REPO_ROOT / "specs" / name / "tasks.md")
+    return split_deferred(main_tasks_text(name))
+
+
 def cmd_status(_: list[str]) -> None:
-    print("| FEATURE | 仕様 | 実装 | WORKTREE | 人の作業 |")
-    print("|---|---|---|---|---|")
+    print("| FEATURE | 仕様 | 実装 | WORKTREE | 人の作業 | 後の作業 |")
+    print("|---|---|---|---|---|---|")
     for name in get_all_features():
         if implemented_without_spec(name):
-            print(f"| {name} | -（Spec Kit 以前） | 完了 | - | - |")
+            print(f"| {name} | -（Spec Kit 以前） | 完了 | - | - | - |")
             continue
         human = human_pending_of(name)
         human_col = f"残り {len(human)} 件" if human else "-"
+        deferred = deferred_pending_of(name)
+        deferred_col = f"残り {len(deferred)} 件" if deferred else "-"
         if name in branch_features() and not worktree_of(name).is_dir():
             text = branch_tasks_text(name)
             remaining = len(split_unchecked(text)[0])
@@ -804,7 +864,7 @@ def cmd_status(_: list[str]) -> None:
                 coding_col = f"作業中（残り {remaining} 件）"
             else:
                 coding_col = "未着手"
-            print(f"| {name} | {spec_col} | {coding_col} | ブランチ {name} | {human_col} |")
+            print(f"| {name} | {spec_col} | {coding_col} | ブランチ {name} | {human_col} | {deferred_col} |")
             continue
         done = completed_steps(name)
         has_tasks = main_has_tasks(name)
@@ -827,8 +887,10 @@ def cmd_status(_: list[str]) -> None:
             coding_col = "未着手"
         else:
             coding_col = "-"
+        if not coding_done(name) and name in partial_merges(MAIN_BRANCH):
+            coding_col += "（一部をマージ済み）"
         wt_col = f"あり（次: {next_step(name, 'all')}）" if worktree_of(name).is_dir() else "-"
-        print(f"| {name} | {spec_col} | {coding_col} | {wt_col} | {human_col} |")
+        print(f"| {name} | {spec_col} | {coding_col} | {wt_col} | {human_col} | {deferred_col} |")
 
 
 def cmd_human_tasks(args: list[str]) -> None:
@@ -840,6 +902,18 @@ def cmd_human_tasks(args: list[str]) -> None:
         if human:
             print(f"{name}:")
             for line in human:
+                print(f"  {line}")
+
+
+def cmd_deferred_tasks(args: list[str]) -> None:
+    """残っている後の段階のタスク（[後]）を、フィーチャーごとに表示する。"""
+    positional, _, _ = parse_args(args)
+    names = [resolve_feature(positional)] if positional else get_all_features()
+    for name in names:
+        deferred = deferred_pending_of(name)
+        if deferred:
+            print(f"{name}:")
+            for line in deferred:
                 print(f"  {line}")
 
 
@@ -858,6 +932,7 @@ def cmd_sync_status(args: list[str]) -> None:
     status = status_after_coding(name, tasks_file)
     # 実装後の状態（完了 / 人の作業待ち）どうしでだけ動かし、それ以前の状態を飛び越えない。
     changed = update_feature_status(REPO_ROOT, name, status, only_from=(STATUS_DONE, "人の作業待ち"))
+    deferred = deferred_tasks(tasks_file)
     for path in changed:
         info(f"==> 状態を更新しました: {path}（コミットはしていません）")
     print(f"FEATURE_STATUS: {status}")
@@ -865,6 +940,10 @@ def cmd_sync_status(args: list[str]) -> None:
     if human:
         print(f"HUMAN_TASKS_PENDING: {len(human)}")
         for line in human:
+            print(f"  {line}")
+    if deferred:
+        print(f"DEFERRED_TASKS_PENDING: {len(deferred)}")
+        for line in deferred:
             print(f"  {line}")
 
 
@@ -923,10 +1002,13 @@ Commands:
   checkpoint <feature> <step> <subject>
         worktree の変更をすべてコミットし、trailer "Speckit-Step: <step>" と "Speckit-Feature: <feature>" で
         完了を記録する（変更がなくても空コミットで記録）。S2 と S11 では機能ファイルの状態欄も更新する
-  finish <feature> --phase spec|coding|all [--allow-unchecked] [--commit-leftovers] [--switch]
+  finish <feature> --phase spec|coding|all [--allow-unchecked] [--commit-leftovers] [--switch] [--partial]
         最終ステップの完了を確認し、{MAIN_BRANCH} に --no-ff でマージして worktree とブランチを削除する。
         worktree の外で実行する。coding / all では tasks.md に未完了があると止まる（--allow-unchecked で続行）。
-        未完了が {HUMAN_MARKER} のタスクだけなら止めずにマージし、HUMAN_TASKS_PENDING で残りを表示する。
+        未完了が {HUMAN_MARKER}・{DEFERRED_MARKER} のタスクだけなら止めずにマージし、
+        HUMAN_TASKS_PENDING・DEFERRED_TASKS_PENDING で残りを表示する。
+        --partial（coding / all）: 最終ステップと未完了の検査をせず、"merge(<feature>): partial" の件名でマージする。
+        他の機能の前提として一部の Phase だけを先に入れるときに使う（進捗は進めない）
         どのステップにも含まれない変更があると止まる（--commit-leftovers で続行）。
         メインの作業ツリーが main 以外にいると止まる（--switch で main に切り替えて続行）
   abort <feature> [--yes]
@@ -934,9 +1016,11 @@ Commands:
   list
         全フィーチャー名を着手順（spec_order.md の並び、その後に番号順）で表示する
   status
-        全フィーチャーの仕様・実装・worktree の状況と、残っている人のタスクの件数を表示する
+        全フィーチャーの仕様・実装・worktree の状況と、残っている人のタスク・後の段階のタスクの件数を表示する
   human-tasks [<feature>]
         残っている {HUMAN_MARKER} のタスクを表示する（worktree があればその tasks.md、なければ {MAIN_BRANCH} のもの）
+  deferred-tasks [<feature>]
+        残っている {DEFERRED_MARKER} のタスクを表示する（読む tasks.md は human-tasks と同じ）
   sync-status <feature>
         {MAIN_BRANCH} にマージ済みのフィーチャーの状態欄を tasks.md に合わせる（完了 / 人の作業待ち）。
         人のタスクを片付けた後に {MAIN_BRANCH} で実行する。変更はコミットしない
@@ -961,6 +1045,7 @@ COMMANDS = {
     "list": cmd_list,
     "status": cmd_status,
     "human-tasks": cmd_human_tasks,
+    "deferred-tasks": cmd_deferred_tasks,
     "sync-status": cmd_sync_status,
     "next": cmd_next,
     "resolve": cmd_resolve,

@@ -45,7 +45,7 @@ $ARGUMENTS
 | 各機能ファイル（状態が「未着手」のもの） | `**依存**` に `000-game-foundation` を足す |
 | `docs/feature/premises.md` | 「基盤の候補」の各行の「結果」を書く |
 
-終わったら、`gamekit-bootstrap` §3 の形で G11 を記録する（`docs(bootstrap): G11 共通基盤を定義`、trailer `Gamekit-Bootstrap: G11`）。単独で実行したときも記録する。更新モードで 000 を直しただけのときは、`docs(feature): 000 を更新` の通常のコミットにする。
+終わったら、`gamekit-bootstrap` §3 のコマンドで G11 を記録する（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G11 "docs(bootstrap): G11 共通基盤を定義" --allow-empty`）。単独で実行したときも記録する。更新モードで 000 を直しただけのときは、`docs(feature): 000 を更新` の通常のコミットにする。
 
 **`docs/feature/` にすでに `000-*` がある場合**（`000-game-foundation.md` のほか、speckit の `000-app-basic.md` など）は、新しく作らず、その名前のまま**更新モード**（§4）で使う。以下の `000-game-foundation` は、その名前に読み替える。`000-*` が複数あるときは、どれを共通基盤にするかをユーザーに確かめる（自動モードでは止まる）。
 

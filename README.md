@@ -120,9 +120,15 @@ new-gamekit-project ~/projects/private/game/metal --adopt
 python3 skills/gamekit/gamekit-status/scripts/gamekit.py status     # ゲームの工程と機能の工程の進捗
 python3 skills/gamekit/gamekit-status/scripts/gamekit.py handover   # 引き継ぎ書（docs/handover/）
 python3 skills/gamekit/gamekit-status/scripts/gamekit.py doctor     # 設定とリンクの診断
+python3 skills/gamekit/gamekit-status/scripts/gamekit.py checkpoint G5 "docs(bootstrap): G5 …" --allow-empty   # ゲームの工程の記録
 ```
 
-または `/gamekit-status` を実行する。
+または `/gamekit-status` を実行する。ゲームの工程の記録は `checkpoint` で行い、コミットを手で書かない（trailer `Gamekit-Bootstrap: G<n>` を最後の段落に置かないと、完了として数えられない）。
+
+### 後の段階に回すタスクと、一部だけを先にマージする
+
+- **`[後]`**: 仕様で段階を分けると決めたタスク（垂直スライスに要らない分、ほかの機能の実装を待つ分など）には `tasks.md` で `[後]` を付け、「（いつ: …）」を書く。`finish` は `[人]` と同じく止まらずにマージし、`DEFERRED_TASKS_PENDING` で残りを示す。残りは `worktree_helper.py deferred-tasks` と `gamekit.py status` で見える。
+- **`--until` と `--partial`**: ある機能の前提として、別の機能の一部の Phase だけを先に入れるときは、`/gamekit-coding 001 --until "Phase 1"` で実装し、`worktree_helper.py finish 001 --phase coding --partial` で `main` に入れる。件名は `merge(001): partial` で、001 の進捗は進まない（残りは後で `/gamekit-coding 001` で S8 から続ける）。
 
 ### バランスの確認
 

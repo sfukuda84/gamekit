@@ -1,7 +1,7 @@
 ---
 name: "gamekit-coding"
 description: "ゲームの機能の実装工程を実行するスキル。Git worktree の準備（既存があれば再利用して続きから再開）、実装（speckit-implement。数値はマスタデータに置く）、仕様収束（speckit-converge）、バランス検証（gamekit-balance の verify。シミュレーションを回して目標値と突き合わせる）、5 軸レビュー（gamekit-review。Standards・Spec・Balance・Feel・Originality）と修正、再レビューと修正を行い、main へのマージ、引き継ぎ書の更新、後片付けまでを実行する。spec.md・tuning.md・plan.md・tasks.md が必要で、なければ gamekit-feature を案内する。「この機能を実装して」と言われたとき、または /gamekit-coding と打たれたときに使う。"
-argument-hint: "フィーチャー番号または範囲と、任意の --auto（例: 001, 002-005, all, all --auto, または省略して次の未実装）"
+argument-hint: "フィーチャー番号または範囲と、任意の --auto と --until \"Phase N\"（例: 001, 002-005, all, all --auto, 001 --until \"Phase 1\", または省略して次の未実装）"
 compatibility: "Requires git and Python 3.9+, spec-kit project structure with .specify/ and .gamekit/config.yaml"
 user-invocable: true
 disable-model-invocation: false
@@ -24,6 +24,14 @@ $ARGUMENTS
 ```
 
 引数の解釈と複数フィーチャーの進め方は `gamekit-worktree` の §5 に従う。`--auto` があるときは、下の 💬 の質問も含めて `gamekit-worktree` §6 の自動モードで進める。自動検出では `--phase coding` を使い、`main` の `tasks.md` に未完了のタスク（`- [ ]`）が残っているフィーチャーを対象にする。
+
+引数に `--until "Phase N"` があるときは、ほかの機能の前提として、この機能の `tasks.md` のその Phase までだけを実装して止める（steering「ほかの機能の一部だけを先に作る」）。単一のフィーチャーの指定とだけ組み合わせる。
+
+1. S1 は通常どおり（`$HELPER ensure <feature> --phase coding`）。
+2. S8 の手順で、Phase 1 から指定の Phase までのタスクを実装し、`- [x]` にする。テスト・ビルド・品質ゲートを通す。その Phase の Checkpoint（`tasks.md` に書かれていれば）も確かめる。
+3. S8 の `checkpoint` は記録しない（S8 は終わっていない）。区切りのコミットは trailer なしで作る。S9 以降は行わない。
+4. worktree の外で `$HELPER finish <FEATURE_NAME> --phase coding --partial` を実行して `main` に入れる（`gamekit-worktree` §3「一部だけを先にマージする」）。
+5. 完了報告で、実装した Phase と残りのタスクの件数、続きは `gamekit-coding <FEATURE_NAME>` で S8 から行うことを示す。
 
 ## 2. 実行の流れ（単独実行）
 

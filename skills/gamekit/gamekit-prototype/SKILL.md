@@ -88,8 +88,7 @@ steering の原則 1「面白さを先に確かめる」を担う。機能を作
 `gamekit-bootstrap` から呼ばれたときは、bootstrap がコミットする。単独で実行したときも同じ形で記録する。
 
 ```bash
-git add -A
-git commit --allow-empty -m "docs(bootstrap): G6 コアループの仮説を検証" -m "Gamekit-Bootstrap: G6"
+python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G6 "docs(bootstrap): G6 コアループの仮説を検証" --allow-empty
 ```
 
 G6 の完了の条件は、すべての仮説が「支持」か「保留（確かめる時期と方法つき）」であることである。「棄却」が残っている間は完了にしない。G6 の後に追加で確かめたときは、subject を `docs(game): 仮説 H<n> を検証` にし、trailer を付けない。

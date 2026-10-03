@@ -1,6 +1,6 @@
 # gamekit
 
-AI と一緒にゲームを作るためのスキルセット。[my-speckit-scaffold](../speckit/README.md)（仕様駆動開発）を土台に、[novelkit](../novelkit/README.md) の「作品全体の工程」の作りを取り入れ、ゲームの企画、コアループの検証、システムと経済の設計、バランス調整、手触りと類似性のレビューを足したものである。
+AI と一緒にゲームを作るためのスキルセット。[speckit](../speckit/README.md)（仕様駆動開発）を土台に、[novelkit](../novelkit/README.md) の「作品全体の工程」の作りを取り入れ、ゲームの企画、コアループの検証、システムと経済の設計、バランス調整、手触りと類似性のレビューを足したものである。
 
 - 1 文のコンセプトから、調査、方向性、壁打ち、デザインの柱、コアループの机上検証、システム設計、エンジンの選定、機能の切り出しまでを `gamekit-bootstrap` で通しで進める（G1〜G14）。
 - 機能ごとの仕様から実装までは、speckit と同じ worktree の工程に、調整仕様（S4-2）とバランス検証（S9-1）と 5 軸のレビューを足した `gamekit-all` で進める。
@@ -84,7 +84,7 @@ Spec Kit の標準スキル（`speckit-specify`、`speckit-clarify`、`speckit-p
 
 ## コマンドの導入と更新
 
-[speckit](https://github.com/sfukuda84/my-speckit-scaffold) の `new-speckit-project` と同じく、uv のツールとして入れる。
+[speckit](https://github.com/sfukuda84/speckit) の `new-speckit-project` と同じく、uv のツールとして入れる。
 
 ```bash
 uv tool install "git+https://github.com/sfukuda84/gamekit#subdirectory=tool"   # 導入（初回だけ）

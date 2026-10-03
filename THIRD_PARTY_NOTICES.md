@@ -2,9 +2,9 @@
 
 gamekit には、次のソフトウェアに由来するファイルが含まれている。それぞれのライセンスの条件に従い、著作権表示と許諾文をここに載せる。
 
-## my-speckit-scaffold / novelkit
+## speckit / novelkit
 
-- 出典: https://github.com/sfukuda84/my-speckit-scaffold
+- 出典: https://github.com/sfukuda84/speckit
 - 対象: `skills/gamekit/` のうち speckit・novelkit の追加スキルを元にしたもの（`gamekit-bootstrap`、`gamekit-worktree`（`worktree_helper.py` を含む）、`gamekit-feature`、`gamekit-coding`、`gamekit-all`、`gamekit-review`、`gamekit-architecture`、`gamekit-features`、`gamekit-foundation`、`gamekit-nfr`、`gamekit-design`、`gamekit-status`（`gklib.py` を含む））、`.kiro/steering/`、`CLAUDE.md`、`AGENTS.md`、`GEMINI.md`、`opencode.json`、`scripts/`
 
 ```text

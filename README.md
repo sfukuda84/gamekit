@@ -73,6 +73,15 @@ Spec Kit の標準スキル（`speckit-specify`、`speckit-clarify`、`speckit-p
 
 `gamekit-bootstrap` には、最初に一度だけ質問して以降を自動で進める `--oneshot` と、既存のプロジェクトの資料から足りない成果物だけを作る `--adopt` もある。
 
+## 機能の重さと、質問・レビューの量
+
+1 機能を通すと、質問とレビューの指摘が多くなりがちなので、機能の重さで工程を軽くし、質問とレビューに予算を設けている。
+
+- **重さ**: 機能ファイルのヘッダの `**重さ**`（`軽` / `標準` / `重`）。重 = 保存形式・調整値と目標値・柱に効く規則に触れる、軽 = 画面だけ・文言だけ・設定だけ、標準 = それ以外。軽は clarify 1 回・analyze 1 回・レビュー 1 回（関係する軸だけ）、標準は analyze 2 回・レビューの 2 回目は修正の差分だけ、重は今までどおり。省いたステップは `worktree_helper.py checkpoint … --skipped "<理由>"` で記録し、`status` に「（省略: …）」と出る。引数 `--weight` で上書きできる。
+- **質問の窓**: 仕様工程の質問は、仕様の前と計画の前の 2 回（各最大 4 問。軽は 1 回）にまとめる。実装中に推奨案で決めたことは `specs/<NNN>/decisions.md` に記録し、実装の後に 1 回で確かめる。
+- **レビューの予算**: 変更の種類で審査する軸を選び（UI がなければ Feel は表示の層への影響だけ、調整値・規則の変更がなければ Balance を省く、など）、1 軸あたり最大 8 件、LOW は `reviews/backlog.md` に送って直さない。2 回目で CRITICAL・HIGH が 0 件なら打ち切る。
+- **担当への任せ方**: サブエージェントが使えるときは、親（実行中のエージェント）は質問・採否・`checkpoint`・マージ・検証の再実行を持ち、実装（Phase ごと）・収束・軸ごとのレビュー・修正を担当に任せる。依頼文の雛形は `skills/gamekit/gamekit-worktree/references/delegation.md`。
+
 ## コマンドの導入と更新
 
 [speckit](https://github.com/sfukuda84/my-speckit-scaffold) の `new-speckit-project` と同じく、uv のツールとして入れる。
@@ -159,7 +168,7 @@ python3 $B coverage       # 柱と仮説が、目標値・プレイ確認で検�
 │   ├── speckit/                        # Spec Kit の標準スキル（10 本。編集しない）
 │   └── gamekit/                        # gamekit のスキル（20 本）
 │       ├── gamekit-status/scripts/     #   gamekit.py（進捗・引き継ぎ書・診断）、gklib.py（共通ライブラリ）
-│       ├── gamekit-worktree/scripts/   #   worktree_helper.py（speckit 版の拡張）
+│       ├── gamekit-worktree/scripts/   #   worktree_helper.py（speckit 版の拡張）。references/delegation.md（担当への依頼文の雛形）
 │       ├── gamekit-balance/scripts/    #   balance.py（目標値・調整値・シミュレーション・基準値・柱と仮説の検算）
 │       ├── gamekit-features/scripts/   #   validate.py（機能一式の検証）
 │       └── gamekit-design/scripts/     #   validate_design.py（デザインの要件の検証）

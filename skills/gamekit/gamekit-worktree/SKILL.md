@@ -28,9 +28,9 @@ python3 <skills>/gamekit-worktree/scripts/worktree_helper.py <command> ...
 
 | コマンド | 用途 |
 |---|---|
-| `$HELPER ensure <feature> --phase spec\|coding\|all` | S1 準備。worktree があれば再利用し、なければ `main` から作る |
-| `$HELPER state <feature> --phase spec\|coding\|all` | 変更せずに進捗を表示する |
-| `$HELPER checkpoint <feature> <step> "<subject>"` | worktree の変更をすべてコミットし、ステップの完了を記録する |
+| `$HELPER ensure <feature> --phase spec\|coding\|all [--weight 軽\|標準\|重]` | S1 準備。worktree があれば再利用し、なければ `main` から作る。機能の重さ（`WEIGHT`）も出す（§2「機能の重さ」） |
+| `$HELPER state <feature> --phase spec\|coding\|all [--weight 軽\|標準\|重]` | 変更せずに進捗と機能の重さを表示する |
+| `$HELPER checkpoint <feature> <step> "<subject>" [--skipped "<理由>" [--force]]` | worktree の変更をすべてコミットし、ステップの完了を記録する。`--skipped` は、機能の重さで省いたステップとして記録する（trailer `Gamekit-Skipped`。完了として数える。重さで省けないステップは止まり、`--force` でだけ通す） |
 | `$HELPER finish <feature> --phase spec\|coding\|all [--allow-unchecked] [--commit-leftovers] [--switch] [--partial]` | S12 片付け。`main` に `--no-ff` でマージし、worktree とブランチを削除する。worktree の外で実行する。`--partial`（coding / all）は、最終ステップと未完了のタスクを確かめずに `merge(<feature>): partial` の件名でマージする（ほかの機能の前提として一部の Phase だけを先に入れるとき。進捗は進めない） |
 | `$HELPER abort <feature> [--yes]` | worktree とブランチを破棄する。`--yes` がなければ対象を表示するだけ |
 | `$HELPER list` | 全フィーチャー名を着手順（`spec_order.md` の並び、その後に番号順）で表示する |
@@ -98,7 +98,24 @@ MISSING_ARTIFACTS: ui.md tuning.md
 
 S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差し込んだステップである。speckit で作業を始め、これらの記録なしに後のステップへ進んだ worktree では、差し込んだステップは完了済みとみなされる（済んだ工程に戻らない。speckit から gamekit に取り込んだプロジェクトも同じ）。trailer（`Speckit-Step`、`Speckit-Feature`）は speckit と共通である。
 
-画面のない機能でも S4-1 は飛ばさず、`ui.md` を「UI なし」として記録する。調整値のない機能でも S4-2 は飛ばさず、`tuning.md` を「調整値なし」として記録する。シミュレーションの対象にならない機能でも S9-1 は飛ばさず、`balance-report.md` に「シミュレーション対象外」と理由を書いて記録する。
+画面のない機能・調整値のない機能の S4-1・S4-2 は、機能の重さで扱いが変わる（下の「機能の重さ」）。重の機能では飛ばさず、`ui.md` を「UI なし」、`tuning.md` を「調整値なし」として記録する。軽・標準の機能では、該当しなければ `--skipped` で省いてよい（ファイルは作らない）。シミュレーションの対象にならない機能でも S9-1 は飛ばさず、`balance-report.md` に「シミュレーション対象外」と理由を書いて記録する。
+
+### 機能の重さ
+
+機能ファイル（`docs/feature/<FEATURE_NAME>.md`）のヘッダの `**重さ**`（`軽` / `標準` / `重`）で、工程の重さを変える。判定の規則は `gamekit-features` の「重さ」（重 = 保存形式・調整値と目標値・柱に効く規則のどれかに触れる。軽 = 画面だけ・文言だけ・設定だけ。標準 = それ以外）。`ensure` と `state` が `WEIGHT:` で出す（欄がなければ `標準`）。ユーザーは各スキルの引数 `--weight 軽|標準|重` で上書きできる（`$HELPER` にも同じ指定を渡す）。
+
+| 工程 | 軽 | 標準 | 重 |
+|---|---|---|---|
+| 質問の窓（`gamekit-feature` の「質問の窓」） | 1 つ（S2 の前） | 2 つ（S2 の前、S5 の前） | 2 つ |
+| clarify（S3・S4） | 1 回、最大 3 問（S4 は省く） | 2 回 | 2 回 |
+| 画面仕様・調整仕様（S4-1・S4-2） | 該当するときだけ（しないなら省く） | 該当するときだけ | 必ず（該当しなければ「UI なし」「調整値なし」と書く） |
+| analyze（S7） | 1 回（S7-2・S7-3 は省く） | 2 回（S7-3 は省く） | 3 回 |
+| レビュー（S10・S11） | 1 回、関係する軸だけ（S11 は省く） | 2 回。2 回目は修正の差分だけ | 2 回、5 軸 |
+
+- 省くステップは、本体を行わずに `$HELPER checkpoint <FEATURE_NAME> <step> "<subject>" --skipped "<重さ>: <理由>"` で記録する（例: `--skipped "軽: clarify は 1 回"`）。完了として数えるので、再開と `finish` の判定は崩れない。`status` には「（省略: S4 S7-2）」のように出る。
+- 省けるステップは、軽が S4・S4-1・S4-2・S7-2・S7-3・S11、標準が S4-1・S4-2・S7-3、重はなし。表の外のステップを省こうとすると `$HELPER` が止まる。理由を確かめたうえで `--force` を付けたときだけ通す（自動モードでは付けない）。
+- 仕様化の途中で重さの条件に当たるもの（調整値、保存形式、柱に効く規則）が出てきたら、機能ファイルの重さを上げて、以降の工程を重い方に合わせる。下げるときはユーザーに確かめる。
+- レビューの打ち切り（2 回目で CRITICAL・HIGH が 0 件なら終える）と軸の選び方は `gamekit-review` の「予算と打ち切り」に従う。
 
 `checkpoint` はコミットに trailer `Speckit-Step: <step>` と `Speckit-Feature: <FEATURE_NAME>` を付ける。変更がないステップも空コミットで記録する。進捗は、`main` とブランチにあるこの trailer、`main` にマージ済みの `tasks.md`、`merge(<FEATURE_NAME>): coding|all` のマージコミットから判定する。フィーチャー名付きの trailer はマージの後も残るので、競合を手で解消してマージした後に `finish` を再実行しても進捗は失われない。
 
@@ -110,7 +127,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 
 1. `$HELPER ensure <feature> --phase <phase>` を実行する。`<phase>` は、gamekit-feature が `spec`、gamekit-coding が `coding`、gamekit-all が `all` である。
 2. 終了コードが 3 のときは、§1 の表に従って案内し、そのフィーチャーの作業を止める。
-3. 出力から `FEATURE_NAME`、`WORKTREE_DIR`、`NEXT_STEP` を控える。
+3. 出力から `FEATURE_NAME`、`WORKTREE_DIR`、`NEXT_STEP`、`WEIGHT` を控える。機能ファイルに `**重さ**` がなければ（`WEIGHT` が既定の `標準` のとき、ヘッダを確かめる）、`gamekit-features` の「重さ」の規則で判定して書き足し、trailer なしの通常のコミットにする。以降の工程は §2「機能の重さ」の表に従う。
 4. `WORKTREE_STATE` が `reused` か `reattached` のときは、`COMPLETED_STEPS` と `NEXT_STEP` をユーザーに示し、`NEXT_STEP` から再開してよいか確認する。ユーザーが別のステップからのやり直しを指示した場合は、そのステップから進める（完了済みの記録は残したまま、成果物を更新する）。
 5. `MISSING_ARTIFACTS` があれば、S8 の前に作る。ui.md は `gamekit-design` §3、tuning.md は `gamekit-balance` の spec モードで作る。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま。`checkpoint` は記録しない）。
 6. `NEXT_STEP` が自分の担当範囲の最後より後（`S12`）なら、本体のステップを飛ばして S12 に進む。
@@ -184,6 +201,28 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 - **テスト・ビルド・リンター・ヘッドレス実行**: 実行するコマンドは、`.gamekit/config.yaml` の `commands`（`python3 <skills>/gamekit-status/scripts/gamekit.py config get commands.test` などで読む）を正とする。空なら `plan.md` の技術コンテキスト、`quickstart.md`、プロジェクトの設定ファイル（`project.godot`、`package.json`、`Makefile` など）から判断する。判断できない場合はユーザーに確認する。
 - **エンジンのエディタ**: エディタでしかできない操作（シーンの配置、インポートの設定など）は、テキストのシーン・リソースファイルを直接書くか、手順を示して `[人]` のタスクにする（steering の「エージェントの行動規範」）。
 - **コマンドの書き方**: speckit のスキル本文にある `$speckit-plan` のようなコマンド参照は、実行中のエージェントの呼び出し方に読み替える。
+- **質問はまとめる**: 仕様工程の質問は `gamekit-feature` の「質問の窓」に、実装工程で決めたことは `FEATURE_DIR/decisions.md` に集め、S8 の終わりに 1 回で確かめる（`gamekit-coding` の S8）。窓の外で止めてよいのは、窓まで待つと作業が無駄になる前提の誤りだけである。
+
+### 親と担当の役割
+
+サブエージェント（Claude Code の Agent など）が使えるときは、実行中のエージェント（親）は指揮と裏取りに回り、量の多い作業を担当（サブエージェント）に任せる。1 人で全部を抱えると文脈が足りなくなる。依頼文の雛形は [references/delegation.md](references/delegation.md) にある。
+
+| 役割 | 親が持つ | 担当に任せる |
+|---|---|---|
+| ユーザーとのやりとり | 質問（質問の窓、`decisions.md` の確認）、採否の判断、完了報告 | — |
+| 進捗と git | `checkpoint`、`finish`（マージ）、push、`--skipped` の判断 | 区切りの通常のコミット（trailer なし） |
+| 作業 | 仕様工程の成果物（S2〜S7。量が多ければ下書きを任せてよい） | S8（Phase ごとに分ける）、S9、S9-1 の調整、軸ごとのレビュー（`gamekit-review`）、指摘の修正 |
+| 検証 | 担当の報告の後に、テスト・ゲート・`balance.py check` などを自分で再実行する | 自分の作業の範囲の検証 |
+
+- 担当にさせないこと: `checkpoint`、マージ、push、ユーザーへの質問、ほかの担当の範囲の編集、破壊的な git の操作。担当が判断に迷ったら、推奨案で進めて `decisions.md` に書かせ、親がまとめて確かめる。
+- 並行に走らせるのは、ファイルが重ならない作業だけにする（レビューの軸どうしは並行してよい。S8 の Phase は依存があるので順に）。
+- サブエージェントがない環境では、親が同じ順で自分で行う。役割の区切り（報告の形、検証の再実行）は同じにする。
+
+### 文脈の節約
+
+- 親は差分そのものを読まず、担当の報告（件数、決めたこと、検証の結果）と、自分で再実行した検証の結果を見る。報告に疑問があるときだけ、該当するファイルの行を開いて裏を取る。
+- 大きなステップ（とくに S8）は Phase の境目でコミットさせ、次の担当には「前の担当のコミット」と「決めたことの台帳」だけを渡す。
+- 会話が長くなったら、ステップの境目で `python3 <skills>/gamekit-status/scripts/gamekit.py handover --note "<止めた理由と次の作業>"` を実行して区切り、新しいセッションで同じスキルを実行して再開する。
 
 ## 5. 引数の解釈と複数フィーチャーの進め方
 
@@ -195,8 +234,9 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 | なし | （空） | `$HELPER next --phase <phase>` の 1 件。空なら対象なしと報告する |
 | 自動モード | `--auto`、`002-005 --auto`、`--auto all` | 上のいずれかと組み合わせる。質問せずに推奨案を採用して進める（§6） |
 | モックを作る | `--with-mock`、`002 --with-mock --auto` | 上のいずれかと組み合わせる。S4-1 で、Claude Design のモックを作って案を選ぶ（`gamekit-design` のモックの節）。付けなければテキストの画面仕様だけを作る |
+| 重さを上書きする | `--weight 軽`、`003 --weight 重 --auto` | 上のいずれかと組み合わせる。機能ファイルの `**重さ**` の代わりに使う（§2「機能の重さ」） |
 
-- `--auto` と `--with-mock` は位置を問わない。フィーチャーの指定を解釈する前に取り除き、`$HELPER` には渡さない。
+- `--auto` と `--with-mock` は位置を問わない。フィーチャーの指定を解釈する前に取り除き、`$HELPER` には渡さない。`--weight <重さ>` も位置を問わず、`$HELPER` の `ensure`・`state`・`checkpoint` にはそのまま渡す。
 - 一覧にない新しいフィーチャーは、`001-short-name` の形の完全名で指定する。
 - 複数のフィーチャーは 1 件ずつ直列に進める。前のフィーチャーの S12（マージ）が終わってから、次のフィーチャーの S1 に進む。後続のフィーチャーは、先行フィーチャーの成果を含む最新の `main` から分岐する。
 - 範囲指定の途中で `ALREADY_SPECIFIED` や `ALREADY_IMPLEMENTED` になったフィーチャーは、飛ばしたことを記録して次に進む。それ以外の理由で止まったときは、飛ばして続けるか中断するかをユーザーに確認する（自動モードでは確認せずに飛ばす。§6「止まったときの扱い」）。

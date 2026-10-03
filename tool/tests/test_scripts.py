@@ -306,3 +306,98 @@ class CoverageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+VALIDATE_FEATURES = SKILLS / "gamekit-features" / "scripts" / "validate.py"
+
+
+def write_feature(root: Path, name: str, weight: str | None) -> None:
+    d = root / "docs" / "feature"
+    d.mkdir(parents=True, exist_ok=True)
+    header = "**状態**: 未着手 | **区分**: 垂直スライス | **想定順序**: 1 | **依存**: —"
+    if weight is not None:
+        header += f" | **重さ**: {weight}"
+    (d / f"{name}.md").write_text(f"# 機能\n\n{header}\n\n## 概要\n\nx\n", encoding="utf-8")
+
+
+class WeightTest(RepoCase):
+    def test_ensure_and_state_report_weight_from_feature_file_or_default(self) -> None:
+        write_feature(self.repo, "001-foo", "軽")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "feature")
+        proc = helper(self.repo, "ensure", "001-foo", "--phase", "all")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("WEIGHT: 軽", proc.stdout)
+        proc = helper(self.repo, "state", "001-foo", "--phase", "all", "--weight", "重")
+        self.assertIn("WEIGHT: 重", proc.stdout)
+        # 機能ファイルがない（重さの欄がない）機能は 標準
+        proc = helper(self.repo, "state", "002-bar", "--phase", "all")
+        self.assertIn("WEIGHT: 標準", proc.stdout)
+        proc = helper(self.repo, "state", "001-foo", "--phase", "all", "--weight", "超重")
+        self.assertNotEqual(proc.returncode, 0)
+
+    def test_skipped_counts_as_done_and_status_shows_it(self) -> None:
+        name = "001-foo"
+        write_feature(self.repo, name, "軽")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "feature")
+        helper(self.repo, "ensure", name, "--phase", "all")
+        wt = self.repo / ".worktrees" / name
+        for step in ("S2", "S3"):
+            self.assertEqual(helper(wt, "checkpoint", name, step, f"docs: {step}").returncode, 0)
+        proc = helper(wt, "checkpoint", name, "S4", "docs: S4", "--skipped", "軽: clarify は 1 回")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("（省略）", proc.stdout)
+        self.assertIn("Gamekit-Skipped: S4 軽: clarify は 1 回", git(wt, "log", "-1", "--format=%B"))
+        proc = helper(self.repo, "state", name, "--phase", "all")
+        self.assertIn("COMPLETED_STEPS: S2 S3 S4", proc.stdout)
+        self.assertIn("NEXT_STEP: S4-1", proc.stdout)
+        self.assertIn("SKIPPED_STEPS: S4", proc.stdout)
+        status = helper(self.repo, "status")
+        row = next(line for line in status.stdout.splitlines() if line.startswith(f"| {name} "))
+        self.assertIn("（省略: S4）", row)
+
+    def test_heavy_feature_cannot_skip_without_force(self) -> None:
+        name = "001-foo"
+        write_feature(self.repo, name, "重")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "feature")
+        helper(self.repo, "ensure", name, "--phase", "all")
+        wt = self.repo / ".worktrees" / name
+        for step in ("S2", "S3"):
+            helper(wt, "checkpoint", name, step, f"docs: {step}")
+        proc = helper(wt, "checkpoint", name, "S4", "docs: S4", "--skipped", "省きたい")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("省けません", proc.stderr)
+        # 標準でも S7-1 は省けない
+        proc = helper(wt, "checkpoint", name, "S4", "docs: S4", "--skipped", "省きたい", "--weight", "標準")
+        self.assertNotEqual(proc.returncode, 0)
+        proc = helper(wt, "checkpoint", name, "S4", "docs: S4", "--skipped", "理由を確かめた", "--force")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("S4", helper(self.repo, "state", name, "--phase", "all").stdout)
+
+
+class ValidateWeightTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def validate(self) -> subprocess.CompletedProcess:
+        return run([sys.executable, str(VALIDATE_FEATURES), str(self.tmp / "docs" / "feature")], self.tmp)
+
+    def test_missing_weight_is_warning(self) -> None:
+        write_feature(self.tmp, "001-foo", None)
+        out = self.validate()
+        line = next((l for l in (out.stdout + out.stderr).splitlines() if "**重さ** がない" in l), "")
+        self.assertIn("警告", line)
+
+    def test_invalid_weight_is_error_and_valid_weight_is_silent(self) -> None:
+        write_feature(self.tmp, "001-foo", "超重")
+        out = self.validate()
+        line = next((l for l in (out.stdout + out.stderr).splitlines() if "重さ「超重」" in l), "")
+        self.assertIn("エラー", line)
+        write_feature(self.tmp, "001-foo", "標準")
+        out = self.validate()
+        self.assertNotIn("重さ", out.stdout + out.stderr)

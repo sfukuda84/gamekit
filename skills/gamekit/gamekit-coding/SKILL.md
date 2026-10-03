@@ -1,7 +1,7 @@
 ---
 name: "gamekit-coding"
 description: "ゲームの機能の実装工程を実行するスキル。Git worktree の準備（既存があれば再利用して続きから再開）、実装（speckit-implement。数値はマスタデータに置く）、仕様収束（speckit-converge）、バランス検証（gamekit-balance の verify。シミュレーションを回して目標値と突き合わせる）、5 軸レビュー（gamekit-review。Standards・Spec・Balance・Feel・Originality）と修正、再レビューと修正を行い、main へのマージ、引き継ぎ書の更新、後片付けまでを実行する。spec.md・tuning.md・plan.md・tasks.md が必要で、なければ gamekit-feature を案内する。「この機能を実装して」と言われたとき、または /gamekit-coding と打たれたときに使う。"
-argument-hint: "フィーチャー番号または範囲と、任意の --auto と --until \"Phase N\"（例: 001, 002-005, all, all --auto, 001 --until \"Phase 1\", または省略して次の未実装）"
+argument-hint: "フィーチャー番号または範囲と、任意の --auto、--until \"Phase N\"、--weight（例: 001, 002-005, all, all --auto, 001 --until \"Phase 1\", 004 --weight 軽, または省略して次の未実装）"
 compatibility: "Requires git and Python 3.9+, spec-kit project structure with .specify/ and .gamekit/config.yaml"
 user-invocable: true
 disable-model-invocation: false
@@ -23,7 +23,7 @@ disable-model-invocation: false
 $ARGUMENTS
 ```
 
-引数の解釈と複数フィーチャーの進め方は `gamekit-worktree` の §5 に従う。`--auto` があるときは、下の 💬 の質問も含めて `gamekit-worktree` §6 の自動モードで進める。自動検出では `--phase coding` を使い、`main` の `tasks.md` に未完了のタスク（`- [ ]`）が残っているフィーチャーを対象にする。
+引数の解釈と複数フィーチャーの進め方は `gamekit-worktree` の §5 に従う。`--auto` があるときは、下の 💬 の確認も含めて `gamekit-worktree` §6 の自動モードで進める。`--weight 軽|標準|重` があるときは、機能ファイルの重さの代わりに使う。自動検出では `--phase coding` を使い、`main` の `tasks.md` に未完了のタスク（`- [ ]`）が残っているフィーチャーを対象にする。
 
 引数に `--until "Phase N"` があるときは、ほかの機能の前提として、この機能の `tasks.md` のその Phase までだけを実装して止める（steering「ほかの機能の一部だけを先に作る」）。単一のフィーチャーの指定とだけ組み合わせる。
 
@@ -52,6 +52,10 @@ $ARGUMENTS
 
 テスト、ビルド、リンター、ヘッドレス実行のコマンドは `gamekit-worktree` §4 に従って判断する（`.gamekit/config.yaml` の `commands` が正）。以下、`$GK` は `python3 <skills>/gamekit-status/scripts/gamekit.py`、`$BAL` は `python3 <skills>/gamekit-balance/scripts/balance.py` である。
 
+**機能の重さ**: S1 の `WEIGHT` に従う（`gamekit-worktree` §2「機能の重さ」）。軽はレビューを 1 回・関係する軸だけにし、S11 を `--skipped` で記録する。標準と重は 2 回行い、標準の 2 回目は S10 の修正の差分だけを見る。
+
+**担当への任せ方**: S8（Phase ごとに分ける）、S9、S9-1 の調整、軸ごとのレビュー、指摘の修正は、サブエージェントに任せてよい。親は質問、採否、`checkpoint`、検証の再実行を持つ（`gamekit-worktree` §4「親と担当の役割」「文脈の節約」）。依頼文の雛形は `gamekit-worktree` の [references/delegation.md](../gamekit-worktree/references/delegation.md) にある。
+
 ### S8: 実装（speckit-implement）
 
 1. `speckit-implement` スキルの手順に従い、`FEATURE_DIR/tasks.md` の全タスクを実装する。
@@ -63,10 +67,11 @@ $ARGUMENTS
    - `[人]` の付いたタスク（実機のプレイ確認など）は実行しない。手順を示して保留にし、依存しない後続のタスクを続ける。
    - タスクが終わるごとに `tasks.md` のチェックボックスを `- [x]` に更新する。区切りのよいところでは、trailer なしの通常のコミットを作ってよい。
 2. テスト、ビルド、リンター、ヘッドレス実行（`commands.run_headless`。数フレーム回してエラーが出ないこと）を実行し、すべて通ることを確かめる。
-3. `$BAL params specs/<FEATURE_NAME>/tuning.md` を実行し、データの場所がすべて解決し、初期値と一致することを確かめる（ERROR と WARN を 0 件にする）。
-4. `checkpoint <FEATURE_NAME> S8` を記録する。
+3. `tuning.md` があれば、`$BAL params specs/<FEATURE_NAME>/tuning.md` を実行し、データの場所がすべて解決し、初期値と一致することを確かめる（ERROR と WARN を 0 件にする）。S4-2 を `--skipped` で省いた機能では行わない。
+4. **決めたことの確認**: 実装中に推奨案で決めたこと（仕様の隙間、例外時の挙動、設計方針の分岐、ライブラリの選定）は、その都度ユーザーに聞かず、`FEATURE_DIR/decisions.md`（様式: [templates/decisions.md](templates/decisions.md)）に記録しておく。仕様工程（S5〜S7）で記録したものも含めて、ここで 1 回にまとめて確かめる（重要なものを最大 4 問で聞き、残りは「推奨案のまま採用してよいか」をまとめて聞く）。回答を「確認の結果」の列に書き、変える決定があれば直してからテストを通し直す。自動モードでは確かめず、「確認の結果」を「自動で採用」にする。
+5. `checkpoint <FEATURE_NAME> S8` を記録する。
 
-> 💬 実装中に仕様の隙間、例外時の挙動、設計方針の分岐が出てきた場合は、ユーザーに質問して合意を取る。仕様を変える場合は、コードだけでなく `spec.md`、`tuning.md`、`plan.md`、`tasks.md` にも反映する。
+> 💬 実装中に出てきた仕様の隙間、例外時の挙動、設計方針の分岐は、推奨案で進めて `decisions.md` に記録し、手順 4 でまとめて確かめる。窓まで待つと作業が無駄になるもの（作る対象の取り違え、憲章や柱の変更が要るもの）だけは、その場で止めて聞く。仕様を変える場合は、コードだけでなく `spec.md`、`tuning.md`、`plan.md`、`tasks.md` にも反映する。
 
 ### S9: 仕様収束（speckit-converge）
 
@@ -77,7 +82,7 @@ $ARGUMENTS
 2. ギャップがある場合は、`tasks.md` の末尾に `## Phase N: Convergence` として不足タスクを追加し、S8 と同じ手順で実装とテストを行う。もう一度照合し、「✅ Converged」になるまで繰り返す。
 3. 未達のギャップが 0 件になったら、`checkpoint <FEATURE_NAME> S9` を記録する。未完了の `[人]` のタスクはギャップに数えない。
 
-> 💬 ギャップの解消方針や仕様との乖離について判断が必要な場合は、ユーザーに質問する。
+> 💬 ギャップの解消方針の判断は、推奨案で直して `decisions.md` に記録する。仕様（柱・憲章・目標値）を変える必要があるときだけ、まとめて 1 回聞く。
 
 ### S9-1: バランス検証（gamekit-balance の verify）
 
@@ -93,25 +98,25 @@ $ARGUMENTS
 
 ### S10: 5 軸レビュー 1 回目と修正（gamekit-review）
 
-[`gamekit-review`](../gamekit-review/SKILL.md) スキルの手順に従い、5 軸（Standards・Spec・Balance・Feel・Originality）のレビューを行う。
+[`gamekit-review`](../gamekit-review/SKILL.md) スキルの手順に従い、レビューを行う。審査する軸は、変更の種類と機能の重さで選ぶ（`gamekit-review` の「予算と打ち切り」。重は 5 軸、軽は関係する軸だけ）。
 
 1. レビュー対象の差分として `git diff main...HEAD` を取得する（マージ先が main 以外なら、その名前に読み替える。以下同じ）。
-2. 5 軸でレビューし、記録を `FEATURE_DIR/reviews/review-1.md` に書く。可能なら、軸ごとに文脈を持たないサブエージェントで独立にレビューし、親が指摘の裏を取ってから採否を決める（`gamekit-review` §4）。
+2. 選んだ軸でレビューし（1 軸あたり最大 8 件。LOW は `FEATURE_DIR/reviews/backlog.md` に送る）、記録を `FEATURE_DIR/reviews/review-1.md` に書く。可能なら、軸ごとに文脈を持たないサブエージェントで独立にレビューし、親が指摘の裏を取ってから採否を決める（`gamekit-review` §4）。
 3. CRITICAL、HIGH、MEDIUM の指摘を直し、テストとヘッドレス実行が通ること、バランスの指摘を直したなら `$BAL check --feature <FEATURE_NAME>` が通ることを確かめる。体感の判定が要る Feel 軸の指摘は、`[人]` のプレイ確認のタスクの観点に足す。
 4. `checkpoint <FEATURE_NAME> S10` を記録する。
 
-> 💬 指摘への対応方針（リファクタリングの方針や優先度）に判断が必要な場合は、推奨案を添えて質問し、合意を取る。
+> 💬 指摘の採否は親が裏を取って決める。ユーザーに聞くのは、仕様・柱・憲章・目標値を変える採否だけで、まとめて 1 回にする（推奨案を添える）。
 
 ### S11: 再レビューと修正（gamekit-review）
 
-S10 の修正が既存のロジックや数値を壊していないか、新たな不整合やエッジケースの抜けがないかを確かめるため、2 回目のレビューを行う。
+S10 の修正が既存のロジックや数値を壊していないか、新たな不整合やエッジケースの抜けがないかを確かめるため、2 回目のレビューを行う。軽の機能では行わず、`checkpoint <FEATURE_NAME> S11 "<subject>" --skipped "軽: レビューは 1 回"` で記録する。標準の機能では、2 回目は S10 の修正の差分だけを見る。
 
 1. S10 の修正差分（`git diff HEAD~1`）と全体の差分（`git diff main...HEAD`）を対象に、もう一度 `gamekit-review` を実行し、記録を `FEATURE_DIR/reviews/review-2.md` に書く。1 回目と違うレンズ（`gamekit-review` §4 の「2 回目」）で見る。
 2. 二次的な不整合、型の甘さ、考慮されていないエッジケース、テストの網羅性、バランスの退行を最終確認する。
-3. 残っている指摘を直し、テストがすべて通ることを確かめる。修正がなくても次へ進む。
+3. 残っている指摘を直し、テストがすべて通ることを確かめる。2 回目で CRITICAL・HIGH が 0 件なら、MEDIUM までを直して打ち切る（3 回目は行わない。LOW は `reviews/backlog.md` に送る）。修正がなくても次へ進む。
 4. `checkpoint <FEATURE_NAME> S11` を記録する。
 
-> 💬 残っている指摘への対応の要否について確認が必要な場合は、ユーザーに質問する。
+> 💬 残っている指摘の対応の要否は親が決める。ユーザーに聞くのは、仕様・柱・憲章・目標値を変えるものだけである。
 
 ## 4. 完了報告
 

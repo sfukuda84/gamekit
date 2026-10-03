@@ -92,8 +92,11 @@ def parse_deps(value: str) -> list[str]:
     return [d.strip() for d in value.split(",") if d.strip()]
 
 
+WEIGHTS = ("軽", "標準", "重")
+
+
 def parse_header(path: Path, text: str) -> dict | None:
-    """`**状態**: … | **区分**: … | **想定順序**: … | **依存**: …` 行を読む。"""
+    """`**状態**: … | **区分**: … | **想定順序**: … | **依存**: … | **重さ**: …` 行を読む（重さは任意）。"""
     line = next((l for l in text.splitlines() if l.startswith("**状態**")), None)
     if line is None:
         err(f"{path.name}: ヘッダ行（**状態** で始まる行）がない")
@@ -114,6 +117,11 @@ def parse_header(path: Path, text: str) -> dict | None:
         err(f"{path.name}: 区分「{fields['区分']}」は 垂直スライス / MVP / 拡張 のいずれかにする")
     if not fields["想定順序"].isdigit():
         err(f"{path.name}: 想定順序「{fields['想定順序']}」が整数でない")
+    # 機能の重さ（軽 / 標準 / 重）。工程の重さを決める（gamekit-worktree の「機能の重さ」）。欠けは標準として扱う
+    if "重さ" not in fields:
+        warn(f"{path.name}: ヘッダ行に **重さ** がない（標準として扱う。軽 / 標準 / 重 のどれかを書く）")
+    elif fields["重さ"] not in WEIGHTS:
+        err(f"{path.name}: 重さ「{fields['重さ']}」は 軽 / 標準 / 重 のいずれかにする")
     return fields
 
 

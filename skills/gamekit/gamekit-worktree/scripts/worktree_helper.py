@@ -44,6 +44,18 @@ FEATURE_JSON = ".specify/feature.json"
 ORDER_LINE_RE = re.compile(r"\*\*\s*([0-9]+)\.\s*\[[^\]]*\]\(\./([^.)]+)\.md\)")
 TRAILER_RE = re.compile(r"^Speckit-Step:\s*(\S+)", re.MULTILINE)
 FEATURE_TRAILER_RE = re.compile(r"^Speckit-Feature:\s*(\S+)", re.MULTILINE)
+# checkpoint --skipped で、機能の重さに応じて省いたステップ（完了として数える）。
+SKIPPED_TRAILER_RE = re.compile(r"^Gamekit-Skipped:\s*(\S+)", re.MULTILINE)
+# 機能の重さ（docs/feature/<name>.md のヘッダの **重さ**）。欄がなければ 標準。
+WEIGHTS = ("軽", "標準", "重")
+DEFAULT_WEIGHT = "標準"
+WEIGHT_FIELD_RE = re.compile(r"\*\*重さ\*\*:\s*([^|\n]+?)\s*(?:\||$)", re.MULTILINE)
+# 重さごとに省いてよいステップ（gamekit-worktree の「機能の重さ」の表）。重はどれも省けない。
+SKIPPABLE_STEPS = {
+    "軽": ("S4", "S4-1", "S4-2", "S7-2", "S7-3", "S11"),
+    "標準": ("S4-1", "S4-2", "S7-3"),
+    "重": (),
+}
 MERGE_SUBJECT_RE = re.compile(r"^merge\(([^)]+)\): (spec|coding|all)$", re.MULTILINE)
 UNCHECKED_RE = re.compile(r"^[ \t]*- \[ \].*$", re.MULTILINE)
 CHECKED_RE = re.compile(r"^[ \t]*- \[[xX]\].*$", re.MULTILINE)
@@ -206,6 +218,19 @@ def main_has_all_artifacts(name: str) -> bool:
     return all(main_has_file(name, f) for f in ("spec.md", "plan.md", "tasks.md"))
 
 
+# history() が読みながら集める、フィーチャーごとの省いたステップ（ref をまたいでまとめる）。
+_SKIPPED: dict[str, set[str]] = {}
+
+
+def skipped_steps(name: str) -> list[str]:
+    """checkpoint --skipped で省いたステップ（main とブランチの履歴から）。"""
+    history(MAIN_BRANCH)
+    if branch_exists(name):
+        history(branch_of(name))
+    found = _SKIPPED.get(name, set())
+    return [step for step in ALL_STEPS if step in found]
+
+
 @functools.lru_cache(maxsize=None)
 def history(ref: str) -> tuple[dict[str, frozenset], frozenset]:
     """ref から辿れる全コミットを読み、(フィーチャーごとの完了ステップ, 実装までマージ済みのフィーチャー) を返す。"""
@@ -217,6 +242,7 @@ def history(ref: str) -> tuple[dict[str, frozenset], frozenset]:
             feature = FEATURE_TRAILER_RE.search(body)
             if feature:
                 steps.setdefault(feature.group(1), set()).update(TRAILER_RE.findall(body))
+                _SKIPPED.setdefault(feature.group(1), set()).update(SKIPPED_TRAILER_RE.findall(body))
             for name, phase in MERGE_SUBJECT_RE.findall(body):
                 if phase in ("coding", "all"):
                     merged.add(name)
@@ -233,6 +259,7 @@ def partial_merges(ref: str) -> frozenset:
 def forget_history() -> None:
     """コミットやマージで履歴が変わった後に呼ぶ。"""
     history.cache_clear()
+    _SKIPPED.clear()
     partial_merges.cache_clear()
     main_tasks_text.cache_clear()
     branch_features.cache_clear()
@@ -369,6 +396,36 @@ def feature_file_status(name: str) -> str:
     return ""
 
 
+def feature_file_weight(name: str, wt: Path | None = None) -> str:
+    """機能ファイルの重さ（軽 / 標準 / 重）。worktree があればそちらを優先し、欄がなければ 標準。"""
+    slug = name.split("-", 1)[1] if re.match(r"^[0-9]{3}-", name) else name
+    for filename in (f"{name}.md", f"{slug}.md"):
+        candidates = []
+        if wt is not None:
+            candidates.append(wt / "docs" / "feature" / filename)
+        proc = run_git(["show", f"{MAIN_BRANCH}:docs/feature/{filename}"], check=False)
+        texts = [c.read_text(encoding="utf-8") for c in candidates if c.is_file()]
+        if proc.returncode == 0:
+            texts.append(proc.stdout)
+        path = REPO_ROOT / "docs" / "feature" / filename
+        if path.is_file():
+            texts.append(path.read_text(encoding="utf-8"))
+        for text in texts:
+            m = WEIGHT_FIELD_RE.search(text)
+            if m:
+                value = m.group(1).strip()
+                return value if value in WEIGHTS else DEFAULT_WEIGHT
+    return DEFAULT_WEIGHT
+
+
+def resolve_weight(name: str, override: str | None, wt: Path | None = None) -> str:
+    if override:
+        if override not in WEIGHTS:
+            raise HelperError(f"--weight は {' / '.join(WEIGHTS)} のいずれかにしてください（指定: {override}）。")
+        return override
+    return feature_file_weight(name, wt)
+
+
 def implemented_without_spec(name: str) -> bool:
     """Spec Kit を使う前に実装された機能か（specs/ を持たず、機能ファイルの状態欄が 実装済み か 完了）。"""
     if (main_has_file(name, "spec.md") or worktree_of(name).is_dir() or branch_exists(name)
@@ -503,16 +560,20 @@ def update_feature_status(wt: Path, name: str, status: str, only_from: tuple[str
     return changed
 
 
-def print_state(name: str, phase: str, wt_state: str) -> None:
+def print_state(name: str, phase: str, wt_state: str, weight: str = DEFAULT_WEIGHT) -> None:
     print(f"REPO_ROOT: {REPO_ROOT}")
     print(f"FEATURE_NAME: {name}")
     print(f"BRANCH: {branch_of(name)}")
     print(f"WORKTREE_DIR: {worktree_of(name)}")
     print(f"WORKTREE_STATE: {wt_state}")
     print(f"PHASE: {phase}")
+    print(f"WEIGHT: {weight}")
     done = completed_steps(name)
     print(f"COMPLETED_STEPS: {' '.join(done)}")
     print(f"NEXT_STEP: {next_step(name, phase)}")
+    skipped = skipped_steps(name)
+    if skipped:
+        print(f"SKIPPED_STEPS: {' '.join(skipped)}")
     missing = missing_artifacts(name, phase, done)
     if missing:
         print(f"MISSING_ARTIFACTS: {' '.join(missing)}")
@@ -544,7 +605,7 @@ def parse_args(args: list[str]) -> tuple[str | None, str | None, list[str]]:
             phase = args[i + 1] if i + 1 < len(args) else ""
             i += 2
             continue
-        if arg == "--skip":  # 値を取るフラグ。値は cmd_next が読む
+        if arg in ("--skip", "--weight", "--skipped"):  # 値を取るフラグ。値は flag_value で読む
             i += 2
             continue
         if arg.startswith("--phase="):
@@ -555,6 +616,31 @@ def parse_args(args: list[str]) -> tuple[str | None, str | None, list[str]]:
             positional = arg
         i += 1
     return positional, phase, flags
+
+
+def flag_value(args: list[str], name: str) -> str | None:
+    """`--name value` か `--name=value` の値。なければ None。"""
+    for i, arg in enumerate(args):
+        if arg == name:
+            return args[i + 1] if i + 1 < len(args) else ""
+        if arg.startswith(name + "="):
+            return arg[len(name) + 1:]
+    return None
+
+
+def positionals(args: list[str]) -> list[str]:
+    """フラグとその値を除いた位置引数。"""
+    out: list[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--phase", "--skip", "--weight", "--skipped"):
+            i += 2
+            continue
+        if not arg.startswith("--"):
+            out.append(arg)
+        i += 1
+    return out
 
 
 def require_phase(phase: str | None) -> str:
@@ -607,6 +693,7 @@ def repo_is_dirty() -> bool:
 
 def cmd_ensure(args: list[str]) -> None:
     positional, phase, _ = parse_args(args)
+    weight_override = flag_value(args, "--weight")
     phase = require_phase(phase)
     name = resolve_feature(positional)
     branch = branch_of(name)
@@ -647,21 +734,25 @@ def cmd_ensure(args: list[str]) -> None:
     # Windows でも LF で書く（Path.write_text の newline 引数は 3.10 以降のため open を使う）。
     with open(wt / FEATURE_JSON, "w", encoding="utf-8", newline="\n") as handle:
         handle.write('{\n  "feature_directory": "specs/%s"\n}\n' % name)
-    print_state(name, phase, wt_state)
+    print_state(name, phase, wt_state, resolve_weight(name, weight_override, wt))
 
 
 def cmd_state(args: list[str]) -> None:
     positional, phase, _ = parse_args(args)
     phase = require_phase(phase)
     name = resolve_feature(positional)
-    print_state(name, phase, "present" if worktree_of(name).is_dir() else "absent")
+    wt = worktree_of(name)
+    print_state(name, phase, "present" if wt.is_dir() else "absent",
+                resolve_weight(name, flag_value(args, "--weight"), wt if wt.is_dir() else None))
 
 
 def cmd_checkpoint(args: list[str]) -> None:
-    if len(args) < 3:
-        raise HelperError("使い方: checkpoint <feature> <step> <subject>")
-    name = resolve_feature(args[0])
-    step, subject = args[1], args[2]
+    pos = positionals(args)
+    if len(pos) < 3:
+        raise HelperError('使い方: checkpoint <feature> <step> <subject> [--skipped "<理由>" [--force]] [--weight 軽|標準|重]')
+    name = resolve_feature(pos[0])
+    step, subject = pos[1], pos[2]
+    skipped_reason = flag_value(args, "--skipped")
     if step not in ALL_STEPS:
         raise HelperError(f"ステップ '{step}' は不正です（有効値: {' '.join(ALL_STEPS)}）。")
     wt = worktree_of(name)
@@ -670,6 +761,14 @@ def cmd_checkpoint(args: list[str]) -> None:
     current = worktree_branch(wt)
     if current != branch_of(name):
         raise HelperError(f"{wt} のブランチが '{current}' です。")
+    if skipped_reason is not None:
+        if not skipped_reason.strip():
+            raise HelperError("--skipped には省いた理由を書いてください（例: --skipped \"軽: clarify は 1 回\"）。")
+        weight = resolve_weight(name, flag_value(args, "--weight"), wt)
+        if step not in SKIPPABLE_STEPS[weight] and "--force" not in args:
+            allowed = " ".join(SKIPPABLE_STEPS[weight]) or "なし"
+            raise HelperError(f"重さ「{weight}」では {step} を省けません（省けるステップ: {allowed}）。"
+                              "どうしても省くなら、理由を確かめたうえで --force を付けてください。")
     # 後から足したステップを飛ばして、その次のステップを記録しようとしたら止める。
     # 推定で済んだとみなすのは、足す前に後のステップまで進んでいた worktree だけにする。
     recorded = set(completed_steps(name, infer=False))
@@ -688,10 +787,14 @@ def cmd_checkpoint(args: list[str]) -> None:
             info(f"==> 状態を更新しました: {path}")
 
     stage_all(wt)
-    run_git(["commit", "-q", "--allow-empty", "-m", subject,
-             "-m", f"Speckit-Step: {step}\nSpeckit-Feature: {name}"], cwd=wt)
+    trailers = f"Speckit-Step: {step}\nSpeckit-Feature: {name}"
+    if skipped_reason is not None:
+        reason = " ".join(skipped_reason.split())
+        trailers += f"\nGamekit-Skipped: {step} {reason}"
+    run_git(["commit", "-q", "--allow-empty", "-m", subject, "-m", trailers], cwd=wt)
     forget_history()
-    print(f"CHECKPOINT: {step} {git_out(['rev-parse', '--short', 'HEAD'], cwd=wt)}")
+    print(f"CHECKPOINT: {step} {git_out(['rev-parse', '--short', 'HEAD'], cwd=wt)}"
+          + ("（省略）" if skipped_reason is not None else ""))
     print(f"NEXT_STEP: {next_step(name, 'all')}")
 
 
@@ -908,6 +1011,14 @@ def cmd_status(_: list[str]) -> None:
         if not coding_done(name) and name in partial_merges(MAIN_BRANCH):
             coding_col += "（一部をマージ済み）"
         wt_col = f"あり（次: {next_step(name, 'all')}）" if worktree_of(name).is_dir() else "-"
+        skipped = skipped_steps(name)
+        if skipped:
+            spec_skipped = [s for s in skipped if s in SPEC_STEPS]
+            coding_skipped = [s for s in skipped if s in CODING_STEPS]
+            if spec_skipped:
+                spec_col += f"（省略: {' '.join(spec_skipped)}）"
+            if coding_skipped:
+                coding_col += f"（省略: {' '.join(coding_skipped)}）"
         print(f"| {name} | {spec_col} | {coding_col} | {wt_col} | {human_col} | {deferred_col} |")
 
 
@@ -1013,13 +1124,16 @@ def cmd_resolve(args: list[str]) -> None:
 USAGE = f"""Usage: worktree_helper.py <command> [arguments]
 
 Commands:
-  ensure <feature> --phase spec|coding|all
-        worktree があれば再利用し、なければ {MAIN_BRANCH} から作る。進捗と次のステップを表示する
-  state <feature> --phase spec|coding|all
-        変更せずに進捗と次のステップを表示する
-  checkpoint <feature> <step> <subject>
+  ensure <feature> --phase spec|coding|all [--weight 軽|標準|重]
+        worktree があれば再利用し、なければ {MAIN_BRANCH} から作る。進捗と次のステップ、機能の重さ（WEIGHT。
+        機能ファイルの **重さ**。欄がなければ 標準。--weight で上書き）を表示する
+  state <feature> --phase spec|coding|all [--weight 軽|標準|重]
+        変更せずに進捗と次のステップ、機能の重さを表示する
+  checkpoint <feature> <step> <subject> [--skipped "<理由>" [--force]] [--weight 軽|標準|重]
         worktree の変更をすべてコミットし、trailer "Speckit-Step: <step>" と "Speckit-Feature: <feature>" で
-        完了を記録する（変更がなくても空コミットで記録）。S2 と S11 では機能ファイルの状態欄も更新する
+        完了を記録する（変更がなくても空コミットで記録）。S2 と S11 では機能ファイルの状態欄も更新する。
+        --skipped: 機能の重さで省いたステップとして記録する（trailer "Gamekit-Skipped: <step> <理由>"。完了として数える）。
+        重さで省けないステップ（重はすべて）は止まる。--force で止めずに記録する
   finish <feature> --phase spec|coding|all [--allow-unchecked] [--commit-leftovers] [--switch] [--partial]
         最終ステップの完了を確認し、{MAIN_BRANCH} に --no-ff でマージして worktree とブランチを削除する。
         worktree の外で実行する。coding / all では tasks.md に未完了があると止まる（--allow-unchecked で続行）。

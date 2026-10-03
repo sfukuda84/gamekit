@@ -1,7 +1,7 @@
 ---
 name: "gamekit-all"
 description: "ゲームの機能の仕様工程と実装工程を 1 つの Git worktree で通して実行するスキル。worktree の準備（既存があれば再利用して続きから再開）、gamekit-feature の仕様工程（specify・clarify x 2・画面と HUD の仕様・調整仕様・plan・tasks・analyze x 3）、gamekit-coding の実装工程（implement・converge・バランス検証・5 軸レビュー x 2）を途中でマージせずに続けて行い、最後に main へのマージ、引き継ぎ書の更新、後片付けを行う。--auto を付けると、質問せずに推奨案を採用して進める。--with-mock を付けると、画面仕様でモックも作る。「次の機能を進めて」「001 を作って」と言われたとき、または /gamekit-all と打たれたときに使う。"
-argument-hint: "フィーチャー番号または範囲と、任意の --auto と --with-mock（例: 001, 002-005, all, all --auto, 003 --with-mock, または省略して次の未完了）"
+argument-hint: "フィーチャー番号または範囲と、任意の --auto、--with-mock、--weight（例: 001, 002-005, all, all --auto, 003 --with-mock, 004 --weight 軽, または省略して次の未完了）"
 compatibility: "Requires git and Python 3.9+, spec-kit project structure with .specify/ and .gamekit/config.yaml"
 user-invocable: true
 disable-model-invocation: false
@@ -24,9 +24,15 @@ $ARGUMENTS
 
 引数の解釈と複数フィーチャーの進め方は `gamekit-worktree` の §5 に従う。自動検出では `--phase all` を使う。
 
-引数に `--auto` があるときは、仕様工程から実装工程、S12 までのすべての質問を `gamekit-worktree` §6 の自動モードで扱う。`gamekit-feature` と `gamekit-coding` の本文にある 💬 の質問も、質問せずに推奨案を採用する。自動モードでも止まる場面（マージの競合、目標値の変更が要るときなど）では、§6「止まったときの扱い」に従う。
+引数に `--auto` があるときは、仕様工程から実装工程、S12 までのすべての質問を `gamekit-worktree` §6 の自動モードで扱う。`gamekit-feature` の質問の窓と、`gamekit-coding` の決めたことの確認（S8 の手順 4）も、質問せずに推奨案を採用する。自動モードでも止まる場面（マージの競合、目標値の変更が要るときなど）では、§6「止まったときの扱い」に従う。
 
 引数に `--with-mock` があるときは、仕様工程の S4-1（画面と HUD の仕様）でモックを作る（`gamekit-design`）。
+
+引数に `--weight 軽|標準|重` があるときは、機能ファイルの重さの代わりに使う（`gamekit-worktree` §2「機能の重さ」）。
+
+**質問の回数**: 通しで聞くのは、多くても次の 3 回にまとめる。仕様の前（`gamekit-feature` の窓 1）、計画の前（窓 2。軽の機能にはない）、実装の後の決めたことの確認（`gamekit-coding` の S8 の手順 4）。レビューの採否は親が決め、仕様・柱・憲章・目標値を変えるものだけを聞く。
+
+**担当への任せ方**: 量の多い作業（S8 の Phase、S9、軸ごとのレビュー、指摘の修正）はサブエージェントに任せ、親は質問・採否・`checkpoint`・検証の再実行を持つ（`gamekit-worktree` §4「親と担当の役割」。雛形は [references/delegation.md](../gamekit-worktree/references/delegation.md)）。
 
 ## 2. 実行の流れ
 
@@ -37,6 +43,7 @@ $ARGUMENTS
 1. **S1 準備**: `gamekit-worktree` §3「S1 準備」に従い、`$HELPER ensure <feature> --phase all` を実行する。
    - 出力に `MISSING_ARTIFACTS`（仕様が済んでいる取り込み済みの機能での `ui.md`・`tuning.md` の欠け）があれば、S8 の前に作る。ui.md は `gamekit-design` §3、tuning.md は `gamekit-balance` の spec モードで作る。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま。`checkpoint` は記録しない）。
    - 仕様がすでに `main` にマージ済みのフィーチャーは、S2〜S7-3 が完了済みと判定され、`NEXT_STEP` が S8 になる。
+   - `WEIGHT`（機能の重さ）を控え、工程の重さを合わせる。機能ファイルに `**重さ**` がなければ判定して書き足す（`gamekit-worktree` §3「S1 準備」）。
 2. **仕様工程**: `gamekit-feature` の §3 の S2〜S7-3 のうち、`NEXT_STEP` 以降を順に実行する。
    - `gamekit-feature` の §2（S1 と S12）は実行しない。**S7-3 の後で `finish` を実行せず、マージしないこと。**
 3. **実装工程**: 同じ worktree のまま、`gamekit-coding` の §3 の S8〜S11 を順に実行する。

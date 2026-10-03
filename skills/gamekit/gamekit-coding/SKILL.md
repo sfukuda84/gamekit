@@ -43,7 +43,7 @@ $ARGUMENTS
 4. **S9-1**: 対象のタスクが `tuning.md` の調整値・目標値に関わるときだけ verify を行う。関わらなければ `--skipped "調整値に関わらない"` で記録する。
 5. **S10・S11**: `gamekit-review` を、機能の重さの規則と予算（§2.1）で行う。差分は `git diff main...HEAD`（後の段階の作業の分だけ）。S10 で CRITICAL・HIGH が 0 件なら、重さに関わらず S11 を `--skipped "S10 で CRITICAL・HIGH が 0 件"` で省いてよい。記録は `FEATURE_DIR/reviews/deferred-<RUN>-review-<n>.md`。
 6. 各ステップの記録は `$HELPER checkpoint <feature> <step> "<subject>" --phase deferred`（`Gamekit-Deferred-Step`。もとの機能の進捗は変えない）。
-7. **S12**: worktree の外で `$HELPER finish <feature> --phase deferred`。対象が `- [x]` でなければ `DEFERRED_TARGETS_UNCHECKED` で止まる。件名は `merge(<feature>): deferred` で、機能ファイルの状態を残りの `[人]`・`[後]` に合わせる。引き継ぎ書を更新する。
+7. **S12**: `decisions.md` に確認の結果が空欄の行があれば、先にまとめて確かめる（`gamekit-worktree` §3「S12 片付け」の 0）。worktree の外で `$HELPER finish <feature> --phase deferred`。対象が `- [x]` でなければ `DEFERRED_TARGETS_UNCHECKED` で止まる。件名は `merge(<feature>): deferred` で、機能ファイルの状態を残りの `[人]`・`[後]` に合わせる。引き継ぎ書を更新する。
 8. **完了報告**: 片付けたタスク、テストとレビューの結果、残りの `[人]`・`[後]`（`HUMAN_TASKS_PENDING`・`DEFERRED_TASKS_PENDING`）。
 
 ## 2. 実行の流れ（単独実行）
@@ -56,7 +56,7 @@ $ARGUMENTS
    - worktree がなく、仕様が `main` にマージ済みの場合は、`main` から新しい worktree を作る。
    - `gamekit-all` などで仕様工程を終えた worktree が残っている場合は、それを再利用する。
 2. **本体**: 下の §3 の S8〜S11 のうち、`NEXT_STEP` 以降を順に実行する。
-3. **S12 片付け**: `gamekit-worktree` §3「S12 片付け」に従い、`$HELPER finish <FEATURE_NAME> --phase coding` を実行し、引き継ぎ書を更新する。
+3. **S12 片付け**: `decisions.md` に確認の結果が空欄の行（S9〜S11 で足されたもの）があれば、先にまとめて確かめる。そのうえで `gamekit-worktree` §3「S12 片付け」に従い、`$HELPER finish <FEATURE_NAME> --phase coding` を実行し、引き継ぎ書を更新する。
 4. 次のフィーチャーがあれば 1 に戻る。
 
 ## 3. 本体（S8〜S11）
@@ -95,7 +95,7 @@ $ARGUMENTS
 2. ギャップがある場合は、`tasks.md` の末尾に `## Phase N: Convergence` として不足タスクを追加し、S8 と同じ手順で実装とテストを行う。もう一度照合し、「✅ Converged」になるまで繰り返す。
 3. 未達のギャップが 0 件になったら、`checkpoint <FEATURE_NAME> S9` を記録する。未完了の `[人]` のタスクはギャップに数えない。
 
-> 💬 ギャップの解消方針の判断は、推奨案で直して `decisions.md` に記録する。仕様（柱・憲章・目標値）を変える必要があるときだけ、まとめて 1 回聞く。
+> 💬 ギャップの解消方針の判断は、推奨案で直して `decisions.md` に記録する（確認はマージの前にまとめる）。仕様（柱・憲章・目標値）を変える必要があるときだけ、まとめて 1 回聞く。
 
 ### S9-1: バランス検証（gamekit-balance の verify）
 

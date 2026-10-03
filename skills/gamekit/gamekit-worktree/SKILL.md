@@ -151,6 +151,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 
 ### S12 片付け
 
+0. **マージの前の確認**: `FEATURE_DIR/decisions.md` に、確認の結果が空欄の行（S9〜S11 で足されたもの）があれば、`finish` の前にまとめて 1 回確かめて記録する（自動モードでは「自動で採用」と記録する）。空欄がなければ飛ばす。
 1. **worktree の外に出てから**、`$HELPER finish <FEATURE_NAME> --phase <phase>` を実行する（`cd "$REPO_ROOT"`。`REPO_ROOT` は `ensure` の出力にある）。worktree の中で実行すると、スクリプトは止まる。スクリプトは次を行う。
    - 担当範囲の最終ステップ（spec は S7-3、coding と all は S11）が完了していることを確かめる。
    - coding と all では、`tasks.md` に未完了のタスクがないことを確かめる（`[人]`・`[後]` 以外があれば `UNCHECKED_TASKS` で止まる。`[人]`・`[後]` だけなら続けて、最後に `HUMAN_TASKS_PENDING`・`DEFERRED_TASKS_PENDING` を出す）。
@@ -210,7 +211,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 - **テスト・ビルド・リンター・ヘッドレス実行**: 実行するコマンドは、`.gamekit/config.yaml` の `commands`（`python3 <skills>/gamekit-status/scripts/gamekit.py config get commands.test` などで読む）を正とする。空なら `plan.md` の技術コンテキスト、`quickstart.md`、プロジェクトの設定ファイル（`project.godot`、`package.json`、`Makefile` など）から判断する。判断できない場合はユーザーに確認する。
 - **エンジンのエディタ**: エディタでしかできない操作（シーンの配置、インポートの設定など）は、テキストのシーン・リソースファイルを直接書くか、手順を示して `[人]` のタスクにする（steering の「エージェントの行動規範」）。
 - **コマンドの書き方**: speckit のスキル本文にある `$speckit-plan` のようなコマンド参照は、実行中のエージェントの呼び出し方に読み替える。
-- **質問はまとめる**: 仕様工程の質問は `gamekit-feature` の「質問の窓」に、実装工程で決めたことは `FEATURE_DIR/decisions.md` に集め、S8 の終わりに 1 回で確かめる（`gamekit-coding` の S8）。窓の外で止めてよいのは、窓まで待つと作業が無駄になる前提の誤りだけである。
+- **質問はまとめる**: 仕様工程の質問は `gamekit-feature` の「質問の窓」に、実装工程で決めたことは `FEATURE_DIR/decisions.md` に集め、S8 の終わりと、マージの前（S12 の前。S9〜S11 で足された分）の 2 回に確かめる（`gamekit-coding` の S8 の手順 4 と「マージの前の確認」）。窓の外で止めてよいのは、窓まで待つと作業が無駄になる前提の誤りだけである。
 
 ### 親と担当の役割
 

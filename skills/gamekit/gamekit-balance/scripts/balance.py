@@ -8,6 +8,7 @@
   python3 balance.py [--root <dir>] check [--feature NNN] [--report <path>]
   python3 balance.py [--root <dir>] baseline [--scenario S]...
   python3 balance.py [--root <dir>] diff [--scenario S]...
+  python3 balance.py [--root <dir>] coverage
 
 - 目標値: docs/balance/targets.md の表（ID | 指標 | シナリオ | 下限 | 上限 | 根拠 | 機能）
 - シミュレーションの出力: <balance.out_dir>/<scenario>.json = {"scenario": str, "seed": int, "metrics": {指標: 数値}}
@@ -15,6 +16,9 @@
   データの場所は「ファイル#JSON Pointer」（例: game/data/enemies.json#/slime/hp）
 - params の判定: ERROR は表の形式の崩れ（ID の形・重複、データの場所の空欄、JSON として読めない）と、値が数値でないこと。
   ファイルや Pointer がまだない（実装前）、初期値と一致しない、は WARN
+- coverage: docs/game/pillars.md の柱（「### 柱 N: …」）と docs/game/core-loop.md の仮説（表の ID が H<n>）が、
+  targets.md の「柱と仮説の検算」の表（対象 | 検算の方法 | 根拠）で検算されているかを確かめる。
+  行がない・検算の方法が空・存在しない BT を指す、は ERROR。プレイ確認・対象外だけのものは INFO
 - 終了コード: 0 成功、1 エラーまたは FAIL（diff では許容を超えた変化）、2 MISSING だけ（check）、3 前提条件を満たさない
 macOS / Linux / Windows で動くように、標準ライブラリだけで書く（Python 3.9 以上）。
 """
@@ -39,6 +43,12 @@ TARGET_ID_RE = re.compile(r"^BT-[0-9]{3,}$")
 PARAM_ID_RE = re.compile(r"^TP-[0-9]{3,}$")
 FEATURE_NUM_RE = re.compile(r"^([0-9]{3})")
 TARGET_COLUMNS = ["ID", "指標", "シナリオ", "下限", "上限", "根拠", "機能"]
+COVERAGE_COLUMNS = ["対象", "検算の方法", "根拠"]
+PILLAR_HEADING_RE = re.compile(r"^#{2,4}\s*柱\s*([0-9]+)\s*[:：]?")
+HYPOTHESIS_ID_RE = re.compile(r"^H[0-9]+$")
+BT_REF_RE = re.compile(r"BT-[0-9]{3,}")
+PLAYTEST_WORD = "プレイ確認"
+EXEMPT_WORD = "対象外"
 WHOLE = "全体"
 
 
@@ -184,6 +194,112 @@ def cmd_targets(ctx: Ctx, args: argparse.Namespace) -> int:
     for w in warns:
         print(f"WARN: {w}")
     print(f"SUMMARY: targets={len(good)} scenarios={len(scenarios_of(good))} errors={len(errors)} warnings={len(warns)}")
+    return 1 if errors else 0
+
+
+# ---------------------------------------------------------------- 柱と仮説の検算（coverage）
+
+def normalize_subject(text: str) -> str:
+    """「柱 1」「柱1」「**柱 1**」→「柱1」、「H1」→「H1」。"""
+    t = re.sub(r"[\s*`]", "", text or "")
+    return t
+
+
+def load_pillars(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    out: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = PILLAR_HEADING_RE.match(line.strip())
+        if m and f"柱{m.group(1)}" not in out:
+            out.append(f"柱{m.group(1)}")
+    return out
+
+
+def load_hypotheses(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    out: list[str] = []
+    for r in gklib.read_table(path, require="仮説"):
+        hid = normalize_subject(r.get("ID", ""))
+        if not HYPOTHESIS_ID_RE.match(hid):
+            continue
+        text = (r.get("仮説") or "").strip()
+        if not text:
+            continue  # テンプレートの空の行
+        if hid not in out:
+            out.append(hid)
+    return out
+
+
+def cmd_coverage(ctx: Ctx, args: argparse.Namespace) -> int:
+    game = gklib.pth(ctx.root, ctx.cfg, "game")
+    pillars_path, loop_path = game / "pillars.md", game / "core-loop.md"
+    errors: list[str] = []
+    infos: list[str] = []
+    warns: list[str] = []
+    pillars = load_pillars(pillars_path)
+    hypotheses = load_hypotheses(loop_path)
+    if not pillars_path.exists():
+        warns.append(f"{rel(ctx.root, pillars_path)} がない（柱の検算を確かめない）")
+    elif not pillars:
+        warns.append(f"{rel(ctx.root, pillars_path)} に「### 柱 N: 名前」の見出しがない")
+    if not loop_path.exists():
+        warns.append(f"{rel(ctx.root, loop_path)} がない（仮説の検算を確かめない）")
+    subjects = pillars + hypotheses
+
+    if not ctx.targets_path.exists():
+        raise Precondition("NO_TARGETS", f"{rel(ctx.root, ctx.targets_path)} がありません（gamekit-systems で作る）。")
+    target_ids = {r.get("ID", "").strip() for r in gklib.read_table(ctx.targets_path, require="指標")}
+    rows = gklib.read_table(ctx.targets_path, require="検算の方法")
+    if rows:
+        missing_cols = [c for c in COVERAGE_COLUMNS if c not in rows[0]]
+        if missing_cols:
+            errors.append(f"「柱と仮説の検算」の表に列がありません: {', '.join(missing_cols)}")
+    table: dict[str, dict[str, str]] = {}
+    for r in rows:
+        subj = normalize_subject(r.get("対象", ""))
+        if not subj or subj.startswith("（") or subj.startswith("("):
+            continue  # 記入例・空行
+        if subj in table:
+            warns.append(f"targets.md:{r.get('_line', '?')} {subj}: 行が重複している（{table[subj]['_line']} 行目）")
+            continue
+        table[subj] = r
+        if subj not in subjects:
+            warns.append(f"targets.md:{r.get('_line', '?')} {subj}: pillars.md・core-loop.md にない対象")
+
+    by_bt = 0
+    for subj in subjects:
+        r = table.get(subj)
+        if r is None:
+            errors.append(f"{subj}: 「柱と仮説の検算」の表に行がない（BT・プレイ確認・対象外のどれかを決める）")
+            continue
+        where = f"targets.md:{r.get('_line', '?')} {subj}"
+        method = (r.get("検算の方法") or "").strip()
+        refs = BT_REF_RE.findall(method)
+        if refs:
+            unknown = [b for b in refs if b not in target_ids]
+            if unknown:
+                errors.append(f"{where}: 目標値の表にない BT を指している（{', '.join(unknown)}）")
+            else:
+                by_bt += 1
+            continue
+        if PLAYTEST_WORD in method:
+            infos.append(f"{where}: プレイ確認だけで検算する（{method}）")
+        elif EXEMPT_WORD in method:
+            infos.append(f"{where}: 対象外（{method}）")
+        else:
+            errors.append(f"{where}: 検算の方法が空か読めない（BT-NNN／プレイ確認（…）／対象外（理由）のどれかにする）")
+    for e in errors:
+        print(f"ERROR: {e}")
+    for w in warns:
+        print(f"WARN: {w}")
+    for i in infos:
+        print(f"INFO: {i}")
+    total = len(subjects)
+    rate = (by_bt / total * 100) if total else 0.0
+    print(f"SUMMARY: pillars={len(pillars)} hypotheses={len(hypotheses)} covered_by_bt={by_bt} "
+          f"bt_rate={rate:.0f}% playtest_or_exempt={len(infos)} errors={len(errors)} warnings={len(warns)}")
     return 1 if errors else 0
 
 
@@ -491,6 +607,7 @@ def main() -> int:
     p = sub.add_parser("check", help="出力と目標値を突き合わせる")
     p.add_argument("--feature")
     p.add_argument("--report")
+    sub.add_parser("coverage", help="柱と仮説が目標値・プレイ確認で検算されているかを確かめる")
     for name, hlp in (("baseline", "出力を基準値として記録する"), ("diff", "出力と基準値を比べる")):
         p = sub.add_parser(name, help=hlp)
         p.add_argument("--scenario", action="append")
@@ -500,7 +617,7 @@ def main() -> int:
     try:
         ctx = Ctx(root)
         handler = {"targets": cmd_targets, "params": cmd_params, "run": cmd_run, "check": cmd_check,
-                   "baseline": cmd_baseline, "diff": cmd_diff}[args.command]
+                   "baseline": cmd_baseline, "diff": cmd_diff, "coverage": cmd_coverage}[args.command]
         return handler(ctx, args)
     except Precondition as exc:
         print(f"PRECONDITION: {exc.code}", file=sys.stderr)

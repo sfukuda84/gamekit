@@ -1,6 +1,6 @@
 ---
 name: "gamekit-balance"
-description: "ゲームの数値を、目標値とシミュレーションで検算するスキル。機能の工程の S4-2（spec モード: specs/<NNN>/tuning.md に調整値と狙う体験を書き、docs/balance/targets.md に検算できる目標値 BT を足す）と S9-1（verify モード: シミュレーションを実行して目標値と突き合わせ、FAIL をデータか仕様の見直しで直し、balance-report.md に残す）を担う。単独では、シミュレーションの準備（Godot・Web の雛形と config.yaml の commands.balance_sim）、基準値の記録、基準値との差分、数値の調整だけの依頼に使う。判定は balance.py（targets / params / run / check / baseline / diff）が行う。「バランスを確かめて」「数値を調整して」「シミュレーションを用意して」「基準値を取って」と言われたとき、または /gamekit-balance と打たれたときに使う。"
+description: "ゲームの数値を、目標値とシミュレーションで検算するスキル。機能の工程の S4-2（spec モード: specs/<NNN>/tuning.md に調整値と狙う体験を書き、docs/balance/targets.md に検算できる目標値 BT を足す）と S9-1（verify モード: シミュレーションを実行して目標値と突き合わせ、FAIL をデータか仕様の見直しで直し、balance-report.md に残す）を担う。単独では、シミュレーションの準備（Godot・Web の雛形と config.yaml の commands.balance_sim）、基準値の記録、基準値との差分、数値の調整だけの依頼に使う。判定は balance.py（targets / params / run / check / baseline / diff / coverage）が行う。「バランスを確かめて」「数値を調整して」「シミュレーションを用意して」「基準値を取って」と言われたとき、または /gamekit-balance と打たれたときに使う。"
 argument-hint: "spec <機能> | verify <機能> | setup | check [--feature <機能>] | baseline | diff | tune <調整の依頼> [--auto]"
 compatibility: "Requires Python 3.9+. Uses .gamekit/config.yaml, docs/balance/targets.md, specs/<NNN>/tuning.md"
 user-invocable: true
@@ -52,6 +52,7 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 | `$BAL check [--feature NNN] [--report <path>]` | 出力と目標値を突き合わせ、PASS / FAIL / MISSING の表を出す | 0 / 1（FAIL）/ 2（MISSING だけ）/ 3 |
 | `$BAL baseline [--scenario S]...` | 出力を基準値の置き場にコピーする | 0 / 1 |
 | `$BAL diff [--scenario S]...` | 出力と基準値を比べ、`balance.tolerance` を超えた変化を出す | 0 / 1（変化あり） |
+| `$BAL coverage` | `docs/game/pillars.md` の柱と `core-loop.md` の仮説が、targets.md の「柱と仮説の検算」の表で検算されているか。行がない・方法が空・存在しない BT を指す、は ERROR。プレイ確認・対象外だけのものは INFO。BT で検算する割合を出す | 0 / 1（ERROR） |
 
 終了コード 3 のときは、標準エラーに `PRECONDITION: <code>` が出る。`NO_TARGETS`（`targets.md` がない → `gamekit-systems`）、`NO_SIM_COMMAND`（→ §5）、`BAD_TARGETS`（→ `$BAL targets` のエラーを直す）、`BAD_FEATURE`（引数の形）である。
 
@@ -67,6 +68,8 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 | 下限・上限 | 数値。片側だけなら、もう一方を `-` |
 | 根拠 | どの設計から来たか（`progression.md §2`、`pillars.md 柱 2`、`GP8`、`spec.md SC-003`） |
 | 機能 | `全体` か `003-crafting`。`check --feature 003` は、その機能の行と `全体` の行を見る |
+
+同じファイルの「柱と仮説の検算」の表（`対象 | 検算の方法 | 根拠`）で、すべての柱（`柱 N`）と仮説（`H<n>`）を何で検算するかを決める。検算の方法は `BT-NNN`（複数可）、`プレイ確認（<参照>）`、`対象外（<理由>）` のどれかである。目標値がすべて PASS でも、柱を表す目標値がなければ、柱が崩れていることに気づけない（farm の 001 で、目標値 2 件が PASS のまま、柱 3 がお金の面で成り立っていなかった）。
 
 ### シミュレーションの出力
 
@@ -87,7 +90,7 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 
 入力: `spec.md`（明確化済み）、`ui.md`、`docs/game/`（`pillars.md`、`core-loop.md`、`systems.md`、`economy.md`、`progression.md`）、`docs/balance/targets.md`、機能概要 `docs/feature/<NNN>.md`（関わる BT の記載）、マスタデータの今の中身。
 
-1. **調整値があるかを決める。** プレイヤーの体験を左右する数値（強さ、価格、時間、確率、量、上限）が、この機能で増えるか変わるか。ない機能（タイトル画面、設定画面、セーブの仕組みなど）は、`tuning.md` を「調整値なし（理由: …）」の 1 段落にして 6 に進む。
+1. **調整値があるかを決める。** プレイヤーの体験を左右する数値（強さ、価格、時間、確率、量、上限）が、この機能で増えるか変わるか。ない機能（タイトル画面、設定画面、セーブの仕組みなど）は、`tuning.md` を「調整値なし（理由: …）」の 1 段落にして 7 に進む。
 2. **狙う体験を書く。** `spec.md` のユーザーストーリーと柱から、この機能でどう感じてほしいかと、崩れたときの症状を書く。
 3. **調整値を洗い出す。** `TP-001` から番号を振る。
    - データの場所は、既存のマスタデータにあればそのキー、なければ置く予定のファイルとキー（S8 で作る）。plan の前なので、形式は `docs/architecture.md` の「データ駆動」の節に合わせる。
@@ -96,8 +99,9 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 4. **目標値を決める。** 調整値が効く指標を、検算できる形で `docs/balance/targets.md` に足す（機能の列にこの機能名）。全体の BT で足りるなら、使う ID を書くだけにする。
    - 「楽しい」「ほどよい」は目標値にならない。時間、回数、割合、偏り（最も使われる選択肢の占有率など）に直す。
    - 支配戦略と抜け道（繰り返すだけで得をする、1 つの選択だけが強い）を挙げ、検出する指標とシナリオを決める。
-5. **シミュレーションとプレイ確認を決める。** 対象のシナリオ（新しく要るなら targets.md の「シナリオ」の表に足す）、シミュレーションから呼ぶ仕組みと出す指標を書く（S6 でタスクになる）。測れないことは「プレイ確認の観点」に書く（S6 で `[人]` のタスクになる）。
-6. **検査する。** `$BAL targets` のエラーを 0 件にする。`$BAL params specs/<NNN>/tuning.md` の ERROR を 0 件にする。まだ作っていないデータの WARN（ファイルや Pointer がない）は、備考に「S8 で作る」と書いて残してよい。
+5. **柱と仮説の検算を更新する。** この機能が関わる柱と仮説（機能概要の「デザインの柱」、`spec.md` の根拠）について、targets.md の「柱と仮説の検算」の表の行を足すか更新する。この機能で、ある柱を初めて検算できるようになる（例: 経済が入って「手抜きが後で返る」をお金で測れるようになる）なら、`プレイ確認` や `対象外` だった行を BT に置き換える。`$BAL coverage` のエラーを 0 件にする。
+6. **シミュレーションとプレイ確認を決める。** 対象のシナリオ（新しく要るなら targets.md の「シナリオ」の表に足す）、シミュレーションから呼ぶ仕組みと出す指標を書く（S6 でタスクになる）。測れないことは「プレイ確認の観点」に書く（S6 で `[人]` のタスクになる）。
+7. **検査する。** `$BAL targets` と `$BAL coverage` のエラーを 0 件にする。`$BAL params specs/<NNN>/tuning.md` の ERROR を 0 件にする。まだ作っていないデータの WARN（ファイルや Pointer がない）は、備考に「S8 で作る」と書いて残してよい。
 
 呼び出し元（`gamekit-feature`）が `checkpoint <FEATURE_NAME> S4-2` を記録する。単独で呼ばれたときは、`docs(<FEATURE_NAME>): 調整仕様を作成` でコミットしてよいかを確かめる。
 
@@ -107,7 +111,7 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 
 入力: `tuning.md`、`docs/balance/targets.md`、S8・S9 で実装したコードとデータ、`.gamekit/config.yaml` の `commands.balance_sim`。
 
-1. **対象かを決める。** `tuning.md` が「調整値なし」、または「シミュレーション: 対象外」の機能は、`balance-report.md` を「対象外（理由: …）」にして 6 に進む。
+1. **対象かを決める。** `tuning.md` が「調整値なし」、または「シミュレーション: 対象外」の機能は、`balance-report.md` を「対象外（理由: …）」にして 5 に進む（柱と仮説の検算は確かめる）。
 2. **前提を確かめる。**
    - `$BAL params specs/<NNN>/tuning.md` の ERROR と WARN を 0 件にする（実装の後なので、まだないデータの WARN も残さない）。データの場所がずれていれば、`tuning.md` かデータを直す（コードに数値が直書きされていたら、データに移す）。
    - `commands.balance_sim` が空（`NO_SIM_COMMAND`）なら、§5 の手順で準備する。準備がこの機能の範囲を超える（エンジンに仕組みがまだない）ときは、止まって `000-game-foundation` か専用の機能での準備を提案する。自動モードでは、`balance-report.md` に「未検証（シミュレーションなし）」と書き、見直しの優先度を「高」にして記録して進む。
@@ -125,8 +129,9 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
    4. **式や仕組みの誤り** → コードを直し、テストを足す。
 
    直したら 3 に戻る。同じ ID の FAIL が 3 回直しても消えなければ、止まって判断を仰ぐ（自動モードでは §7）。
-5. **基準値と比べる。** 基準値（`docs/balance/baseline/`）があれば `$BAL diff` を実行し、この機能で意図して動かした指標と、意図せず動いた指標（ほかの機能の目標値が崩れていないか）を分ける。`$BAL check`（`--feature` なし）で全体の FAIL がないことも確かめる。意図した変化だけなら、`$BAL baseline` で基準値を更新する。
-6. **記録する。** [templates/balance-report.md](templates/balance-report.md) の様式で `specs/<NNN>/balance-report.md` を書く（最後の判定の表、直したこと、差分、残る懸念）。`balance-check.md` は消してよい（中身は report に貼る）。
+5. **柱と仮説の検算を確かめる。** `$BAL coverage` を実行する。ERROR（表に行がない柱・仮説、存在しない BT を指す行）と、`プレイ確認`・`対象外` だけで検算している柱・仮説（INFO）を、`balance-report.md` の「目標値のない柱・仮説」に書く。この機能が効く柱（機能概要の「デザインの柱」）なのに BT がないときは、目標値を足すか（spec モードの 4・5）、プレイ確認で足りるかをユーザーに確かめる。自動モードでは、report に書いて見直しの優先度を「高」にし、進む。
+6. **基準値と比べる。** 基準値（`docs/balance/baseline/`）があれば `$BAL diff` を実行し、この機能で意図して動かした指標と、意図せず動いた指標（ほかの機能の目標値が崩れていないか）を分ける。`$BAL check`（`--feature` なし）で全体の FAIL がないことも確かめる。意図した変化だけなら、`$BAL baseline` で基準値を更新する。
+7. **記録する。** [templates/balance-report.md](templates/balance-report.md) の様式で `specs/<NNN>/balance-report.md` を書く（最後の判定の表、直したこと、目標値のない柱・仮説、差分、残る懸念）。`balance-check.md` は消してよい（中身は report に貼る）。
 
 呼び出し元（`gamekit-coding`）が `checkpoint <FEATURE_NAME> S9-1` を記録する。
 
@@ -179,6 +184,7 @@ python3 <skills>/gamekit-balance/scripts/balance.py [--root <dir>] <command>
 | verify の FAIL（範囲内の調整で合う） | データを直して進む |
 | verify の FAIL（目標値か範囲を変える必要がある） | 変えずに止まる（仕様の見直しは自動で行わない）。範囲指定の実行なら、その機能を飛ばす |
 | シミュレーションがない | report を「未検証」にして進み、見直しの優先度を「高」にする |
+| 目標値のない柱・仮説（coverage） | report の「目標値のない柱・仮説」に書き、見直しの優先度を「高」にして進む |
 | 基準値の更新 | 意図した変化だけのときに限り更新する。意図しない変化があれば更新せず、report に書く |
 
 ## 8. 規則

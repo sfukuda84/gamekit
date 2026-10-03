@@ -4,7 +4,7 @@ AI と一緒にゲームを作るためのスキルセット。[my-speckit-scaff
 
 - 1 文のコンセプトから、調査、方向性、壁打ち、デザインの柱、コアループの机上検証、システム設計、エンジンの選定、機能の切り出しまでを `gamekit-bootstrap` で通しで進める（G1〜G14）。
 - 機能ごとの仕様から実装までは、speckit と同じ worktree の工程に、調整仕様（S4-2）とバランス検証（S9-1）と 5 軸のレビューを足した `gamekit-all` で進める。
-- 数値はマスタデータに置き、目標値（`docs/balance/targets.md`）とシミュレーションの出力を `balance.py` で突き合わせる。
+- 数値はマスタデータに置き、目標値（`docs/balance/targets.md`）とシミュレーションの出力を `balance.py` で突き合わせる。デザインの柱とコアループの仮説を何で検算するか（目標値・プレイ確認・対象外）も targets.md に決め、`balance.py coverage` で抜けを確かめる。
 - Claude Code、Codex CLI、Antigravity、Kiro CLI、opencode で同じスキルと規則を使う（規則の正本は `.kiro/steering/`、スキルの本体は `skills/`）。
 - ステップが終わるたびにコミットし、trailer から進捗を判定する。中断しても続きから再開できる。機能の工程の trailer（`Speckit-Step`、`Speckit-Feature`）とステップ番号は speckit と共通なので、speckit で進めていたプロジェクトに取り込んでも進捗を引き継げる。
 - スクリプトは Python（標準ライブラリのみ、3.9 以上）で、macOS、Linux、Windows で動く。
@@ -112,7 +112,7 @@ new-gamekit-project ~/projects/private/game/metal --adopt
 - 既存の `CLAUDE.md` などは上書きしないので、表示された行（`@.kiro/steering/game-development.md` など）を足す。
 - `.gamekit/config.yaml` の `paths`・`engine`・`commands` を既存の配置に合わせ、`gamekit.py doctor` で確かめる。
 - `/gamekit-bootstrap --adopt` で、既存の資料（企画書、システム設計、競合調査など）から足りない成果物だけを作る。元のファイルは動かさない。
-- speckit で作った `specs/` と、コミットの trailer の進捗はそのまま引き継がれる。S4-2 と S9-1 は、それより後のステップまで進んでいた機能では済んだものとみなされる。
+- speckit で作った `specs/` と、コミットの trailer の進捗はそのまま引き継がれる。S4-2 と S9-1 は、それより後のステップまで進んでいた機能では済んだものとみなされる。そのような機能に `ui.md`・`tuning.md` がなければ、`gamekit-coding` の S1 で `MISSING_ARTIFACTS` が出るので、S8 の前に作る。
 
 ### 進捗の確認と引き継ぎ
 
@@ -138,6 +138,7 @@ python3 $B run            # config.yaml の commands.balance_sim をシナリオ
 python3 $B check          # 目標値（docs/balance/targets.md）と突き合わせる
 python3 $B diff           # 基準値（docs/balance/baseline/）からの動きを見る
 python3 $B baseline       # 今の出力を基準値として記録する
+python3 $B coverage       # 柱と仮説が、目標値・プレイ確認で検算されているかを確かめる
 ```
 
 数値だけを直したいときは、マスタデータと `tuning.md` を直して `check` を通せばよい（仕様化は要らない）。
@@ -159,7 +160,7 @@ python3 $B baseline       # 今の出力を基準値として記録する
 │   └── gamekit/                        # gamekit のスキル（20 本）
 │       ├── gamekit-status/scripts/     #   gamekit.py（進捗・引き継ぎ書・診断）、gklib.py（共通ライブラリ）
 │       ├── gamekit-worktree/scripts/   #   worktree_helper.py（speckit 版の拡張）
-│       ├── gamekit-balance/scripts/    #   balance.py（目標値・調整値・シミュレーション・基準値）
+│       ├── gamekit-balance/scripts/    #   balance.py（目標値・調整値・シミュレーション・基準値・柱と仮説の検算）
 │       ├── gamekit-features/scripts/   #   validate.py（機能一式の検証）
 │       └── gamekit-design/scripts/     #   validate_design.py（デザインの要件の検証）
 ├── scripts/

@@ -510,8 +510,26 @@ def print_state(name: str, phase: str, wt_state: str) -> None:
     print(f"WORKTREE_DIR: {worktree_of(name)}")
     print(f"WORKTREE_STATE: {wt_state}")
     print(f"PHASE: {phase}")
-    print(f"COMPLETED_STEPS: {' '.join(completed_steps(name))}")
+    done = completed_steps(name)
+    print(f"COMPLETED_STEPS: {' '.join(done)}")
     print(f"NEXT_STEP: {next_step(name, phase)}")
+    missing = missing_artifacts(name, phase, done)
+    if missing:
+        print(f"MISSING_ARTIFACTS: {' '.join(missing)}")
+
+
+# 実装工程の前にそろっているべき gamekit の成果物。Spec Kit で仕様化してから取り込んだ機能にはないことがある
+# （S4-1・S4-2 は推定で済んだ扱いになるので、ステップの記録だけでは欠けに気づけない）。
+GAMEKIT_SPEC_ARTIFACTS = ("ui.md", "tuning.md")
+
+
+def missing_artifacts(name: str, phase: str, done: list[str]) -> list[str]:
+    """実装工程（coding・all）で仕様工程が済んでいるのに、ui.md・tuning.md がなければその名前を返す。"""
+    if phase not in ("coding", "all") or "S7-3" not in done:
+        return []
+    wt = worktree_of(name)
+    base = (wt if wt.is_dir() else REPO_ROOT) / "specs" / name
+    return [f for f in GAMEKIT_SPEC_ARTIFACTS if not (base / f).is_file()]
 
 
 def parse_args(args: list[str]) -> tuple[str | None, str | None, list[str]]:

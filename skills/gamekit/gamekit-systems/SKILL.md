@@ -64,10 +64,12 @@ disable-model-invocation: false
    - 抜け道: 「売買の往復での利益 `arbitrage_gain` が 0 以下」
 3. 指標を測る条件を「シナリオ」の表に書く（方針、シード、打ち切り、主に見る指標）。方針は、最低でも「最も効率の良い選択を繰り返す」ものと、「普通のプレイヤーを想定したもの」を用意する。
 4. 根拠の列に、どの文書のどの節から来たかを書く。
-5. `balance.py targets` のエラーを 0 件にする。
+5. **柱と仮説ごとに検算の方法を決める。** targets.md の「柱と仮説の検算」の表に、`docs/game/pillars.md` のすべての柱（`柱 N`）と `docs/game/core-loop.md` のすべての仮説（`H<n>`）の行を書く。検算の方法は、上の目標値（`BT-NNN`）を第一にする。シミュレーションで測れないもの（判断の成立、手触り）だけを `プレイ確認（<参照>）` に、検算しない理由があるものだけを `対象外（<理由>）` にする。柱の約束（例: 「今日の手抜きが後で返る」）を、方針の違うシナリオどうしの差（例: 応急だけと根治だけの収入の差）で表せないかを先に考える。目標値が 2〜3 件しかないのに柱が 5 本ある、という状態にしない。
+6. `balance.py targets` と `balance.py coverage` のエラーを 0 件にする。
 
    ```bash
    python3 <skills>/gamekit-balance/scripts/balance.py targets
+   python3 <skills>/gamekit-balance/scripts/balance.py coverage
    ```
 
 ### ステップ 5: 点検
@@ -120,6 +122,7 @@ python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G7 "docs(bootstrap
 - 資源ごとの狙う増え方と、塞いだ抜け道
 - 全体の長さ、成長曲線の式、解放の順番の要約、難しさの段差
 - 目標値の件数とシナリオの一覧、`balance.py targets` の結果
+- 柱と仮説の検算の内訳（BT で検算する数・プレイ確認・対象外）と、`balance.py coverage` の結果
 - 共通基盤に回す仕組みとして `systems.md` に挙げたもの
 - 次の案内: `gamekit-architecture`（bootstrap の中なら G8 に進む）。シミュレーションの実装は、エンジンを決めた後に `gamekit-balance setup` で行う
 

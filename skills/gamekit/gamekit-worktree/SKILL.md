@@ -52,7 +52,10 @@ WORKTREE_STATE: created | reused | reattached | present | absent
 PHASE: spec
 COMPLETED_STEPS: S2 S3
 NEXT_STEP: S4
+MISSING_ARTIFACTS: ui.md tuning.md
 ```
+
+`MISSING_ARTIFACTS` は、`--phase coding` か `all` で仕様工程（S7-3）が済んでいるのに、`specs/<FEATURE_NAME>/` に `ui.md`・`tuning.md` がないときだけ出る（Spec Kit で仕様化してから取り込んだ機能など）。欠けがなければ、この行は出ない。
 
 終了コードは、0 が成功、1 がエラー、3 が前提条件を満たさないことを表す。3 のときは標準エラーに `PRECONDITION: <code>` と案内文が出る。
 
@@ -109,7 +112,8 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 2. 終了コードが 3 のときは、§1 の表に従って案内し、そのフィーチャーの作業を止める。
 3. 出力から `FEATURE_NAME`、`WORKTREE_DIR`、`NEXT_STEP` を控える。
 4. `WORKTREE_STATE` が `reused` か `reattached` のときは、`COMPLETED_STEPS` と `NEXT_STEP` をユーザーに示し、`NEXT_STEP` から再開してよいか確認する。ユーザーが別のステップからのやり直しを指示した場合は、そのステップから進める（完了済みの記録は残したまま、成果物を更新する）。
-5. `NEXT_STEP` が自分の担当範囲の最後より後（`S12`）なら、本体のステップを飛ばして S12 に進む。
+5. `MISSING_ARTIFACTS` があれば、S8 の前に作る。ui.md は `gamekit-design` §3、tuning.md は `gamekit-balance` の spec モードで作る。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま。`checkpoint` は記録しない）。
+6. `NEXT_STEP` が自分の担当範囲の最後より後（`S12`）なら、本体のステップを飛ばして S12 に進む。
 
 ### 各ステップの作業場所
 

@@ -35,6 +35,7 @@ $ARGUMENTS
 対象フィーチャーごとに、次を順に行う。
 
 1. **S1 準備**: `gamekit-worktree` §3「S1 準備」に従い、`$HELPER ensure <feature> --phase all` を実行する。
+   - 出力に `MISSING_ARTIFACTS`（仕様が済んでいる取り込み済みの機能での `ui.md`・`tuning.md` の欠け）があれば、S8 の前に作る。ui.md は `gamekit-design` §3、tuning.md は `gamekit-balance` の spec モードで作る。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま。`checkpoint` は記録しない）。
    - 仕様がすでに `main` にマージ済みのフィーチャーは、S2〜S7-3 が完了済みと判定され、`NEXT_STEP` が S8 になる。
 2. **仕様工程**: `gamekit-feature` の §3 の S2〜S7-3 のうち、`NEXT_STEP` 以降を順に実行する。
    - `gamekit-feature` の §2（S1 と S12）は実行しない。**S7-3 の後で `finish` を実行せず、マージしないこと。**

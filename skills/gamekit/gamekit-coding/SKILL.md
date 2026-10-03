@@ -38,6 +38,7 @@ $ARGUMENTS
 対象フィーチャーごとに、次を順に行う。
 
 1. **S1 準備**: `gamekit-worktree` §3「S1 準備」に従い、`$HELPER ensure <feature> --phase coding` を実行する。
+   - 出力に `MISSING_ARTIFACTS`（`ui.md`・`tuning.md` の欠け）があれば、S8 の前に作る。ui.md は `gamekit-design` §3、tuning.md は `gamekit-balance` の spec モードで作る。作ったら trailer なしの通常のコミットにする（S4-1・S4-2 は推定で済んだ扱いのまま。`checkpoint` は記録しない）。S8 の `$BAL params` と S9-1 は `tuning.md` を前提にする。
    - 仕様工程の途中の worktree がある場合は `SPEC_INCOMPLETE`、仕様がどこにもない場合は `SPEC_MISSING` で止まる。そのときは何も作らずに、`gamekit-feature` または `gamekit-all` の実行を案内する。
    - worktree がなく、仕様が `main` にマージ済みの場合は、`main` から新しい worktree を作る。
    - `gamekit-all` などで仕様工程を終えた worktree が残っている場合は、それを再利用する。

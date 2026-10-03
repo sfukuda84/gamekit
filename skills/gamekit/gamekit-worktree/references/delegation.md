@@ -55,13 +55,18 @@ Then a one-line count. Under ~600 words.
 
 ```text
 あなたは <FEATURE_NAME> の S<10|11>（レビュー <1|2> 回目）の修正担当。worktree <WORKTREE_DIR>（<直前の checkpoint のコミット>）。
-次の採否の表のとおりに対応する（親が裏を取って決めた）:
+次の採否の表のとおりに対応する（親が裏を取って決めた）。**指摘の本文（対象・根拠・直し方）は、下の「指摘の本文」に審査の出力をそのまま貼る。**
+担当は審査の出力を見られないので、採用しないもの（backlog・プレイ確認・保留）も含めて全件の本文を渡す。ID だけを渡さない。
 | ID | 採否 | 直し方（親の決定） |
 |---|---|---|
 | R1-S01 | 採用 | <…> |
+| R1-S05 | backlog | reviews/backlog.md に送る（直さない） |
 | R1-F08 | プレイ確認へ | tasks.md の [人] のプレイ確認の観点に足す |
 | R1-O01 | 保留 | <申し送り先> に記録する |
+指摘の本文:
+<審査の出力（軸ごと。backlog に送る LOW も含めて全件）>
 - 重複（<ID=ID>）は 1 回で直す。ユーザーの決定: <あれば>。
+- 推奨案で決めたことは specs/<FEATURE_NAME>/decisions.md に続き番号で記録する（確認の結果は空欄。親がマージの前に確かめる）。
 - 仕様・計画を変えたら spec.md（Clarifications に `### Session <日付> (Review <n>)`）・plan・contracts・tuning・tasks にも反映する。
   tasks.md の末尾に `## Phase N: Review <n>` として直したタスクを [x] で記録する。LOW で直さないものは reviews/backlog.md に送る。
 - specs/<FEATURE_NAME>/reviews/review-<n>.md を gamekit-review §5 の様式で書く（要約の表、指摘ごとの採否、テストの結果）。

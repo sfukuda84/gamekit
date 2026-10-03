@@ -1,0 +1,16 @@
+# gamekit が動くのに要る .gitignore の行（既存のプロジェクトへの取り込み --adopt と update は、足りない行だけを足す）
+# scaffold の .gitignore のほかの行（OS、エディタ、言語ごとの生成物など）は、プロジェクトの事情に任せて足さない。
+# 行を足したら、scaffold の .gitignore にも同じ行があることを確かめる。
+
+# gamekit-worktree の作業ツリー
+.worktrees/
+# バランスのシミュレーションの出力（基準値は docs/balance/baseline/ にコミットする）
+build/balance/
+# update が、手で直したファイルの新しい版を置く場所
+.scaffold-new/
+# AI エージェントの個人設定・ローカル状態
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+# スキルのスクリプト（Python）のキャッシュ
+__pycache__/

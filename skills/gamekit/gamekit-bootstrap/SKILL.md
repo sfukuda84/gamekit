@@ -55,12 +55,14 @@ $ARGUMENTS
 
 ## 3. 進捗の記録と再開
 
-- 各ステップが終わったら、次のようにコミットする。変更がなくても空コミットで記録する。
+- 各ステップが終わったら、次のコマンドで記録する。`git add -A` してコミットし、trailer `Gamekit-Bootstrap: <ステップ>` を最後の段落に置く。変更がないステップも `--allow-empty` で記録する。
 
   ```bash
-  git add -A
-  git commit --allow-empty -m "<§2 の subject>" -m "Gamekit-Bootstrap: <ステップ>"
+  python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint <ステップ> "<§2 の subject>" --allow-empty \
+      [--trailer "Co-Authored-By: …"]
   ```
+
+  コミットを手で書かない。trailer を別の段落に分けると git が trailer として読まず、`$GK bootstrap` が完了を数えない（ほかの trailer を付けるときは `--trailer` で渡すと、同じ最後の段落にまとめる）。
 
 - ステップのスキルを単独で実行したとき（例: `/gamekit-seed`）も、同じ形で記録する。各スキルの「出力」の節にある「G<n> を記録する」は、この形のコミットを指す。
 - Claude Code のクラウドセッション（環境変数 `CLAUDE_CODE_REMOTE` が `true`）では、コミットのたびに `git push -u origin HEAD` で作業ブランチを push する。push に失敗しても止まらず、失敗したことを完了報告に挙げる。ローカルでは push しない。

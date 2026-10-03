@@ -38,6 +38,13 @@
 ## C#（Godot .NET）の注意
 
 - .NET 版のエディタと .NET SDK が要る。
+- **macOS での導入（Homebrew。2026-10-03 に farm で確認）**:
+  - .NET 版は cask `godot-mono` で入り、コマンド名は `godot-mono`。標準版（cask `godot`、コマンド `godot`。C# を使えない）とは別のアプリ（`Godot_mono.app`）として併存する。`.gamekit/config.yaml` の `commands` では `godot-mono` を使う。
+  - `godot-mono` は cask `dotnet-sdk` に依存し、その導入に sudo（パスワードの入力）が要る。エージェントの非対話のシェルでは失敗する。formula の `dotnet`（`brew install dotnet`）がすでにあれば、`brew install --cask --skip-cask-deps godot-mono` で依存の cask を飛ばして入れられる。なければ、人が端末で `brew install --cask godot-mono` を実行する（`[人]`）。
+  - 版の確認: `godot-mono --version` が `mono` を含む（例: `4.7.2.stable.mono.official`）。
+- **対象のフレームワーク**: `Godot.NET.Sdk/4.7.2` で `<TargetFramework>net10.0</TargetFramework>` のプロジェクトが、`godot-mono --headless --path <dir> --build-solutions --quit` でビルドできた（2026-10-03、dotnet 10.0.401）。別の版では、空のプロジェクトで同じコマンドを最初に試す。
+- **書き出しの構成と条件付きコンパイル**: エディタからの実行は `Debug`、書き出しは `ExportDebug` / `ExportRelease` の構成でビルドされる。開発用の機能は、`.csproj` で `Debug` と `ExportDebug` にだけ定義した記号（例: `FARM_DEV`）の `#if` で囲むと、`ExportRelease` の成果物にコードが入らない（成果物のアセンブリに型がないことを CI で確かめる）。
+- **書き出したビルドかの判定**: `OS.HasFeature("template")` が真なら書き出したビルド（エディタやソースからの実行では偽）。外部データを `res://` に同梱し、ソースから動かすときはリポジトリのファイルを先に読む、といった切り替えに使う。
 - **Web には書き出せない**（2026-09 時点の Godot 4.7。早くても 4.8 の見込みと言われている）。出典: [Godot Forum](https://forum.godotengine.org/t/is-there-an-update-on-exporting-c-projects-to-web/128821)、[Current state of C# platform support in Godot 4.2](https://godotengine.org/article/platform-state-in-csharp-for-godot-4-2/)（参照日 2026-10-03）。Web に出すなら GDScript にする。
 - モバイル（iOS、Android）への書き出しの状態は、使うバージョンで確かめる。
 - NativeAOT などの書き出しの設定は、端末ごとに確かめる（farm で `PublishAot` を検証した記録がある）。

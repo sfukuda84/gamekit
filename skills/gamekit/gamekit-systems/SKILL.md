@@ -91,8 +91,7 @@ disable-model-invocation: false
 `gamekit-bootstrap` から呼ばれたときは、bootstrap がコミットする。単独で実行したときも同じ形で記録する。
 
 ```bash
-git add -A
-git commit --allow-empty -m "docs(bootstrap): G7 システムと経済と目標値を設計" -m "Gamekit-Bootstrap: G7"
+python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G7 "docs(bootstrap): G7 システムと経済と目標値を設計" --allow-empty
 ```
 
 更新モード・取り込み（G7 の記録がすでにあるとき）は、subject を `docs(game): システム設計を更新` にし、trailer を付けない。

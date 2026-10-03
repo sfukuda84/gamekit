@@ -105,7 +105,7 @@ disable-model-invocation: false
 - `docs/concept/direction.md`（様式: [templates/direction.md](./templates/direction.md)）
 - `docs/concept/backlog.md`（選ばなかった案の要点を追記）
 
-終わったら `gamekit-bootstrap` §3 の形で `G3` を記録する（単独で実行したときも記録する）。
+終わったら `gamekit-bootstrap` §3 のコマンド（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G3 "<subject>" --allow-empty`）で `G3` を記録する（単独で実行したときも記録する）。
 
 ## 4. 完了報告
 

@@ -1,7 +1,7 @@
 ---
 name: "gamekit-worktree"
 description: "gamekit-feature・gamekit-coding・gamekit-all が共通で使う worktree 管理スキル。フィーチャーごとの Git worktree とブランチの準備（既存があれば再利用）、ステップ完了ごとの進捗コミット、main への --no-ff マージと片付け、中止、進捗の確認を行う。3 スキル共通の実行規則（ステップ番号、再開、安全規則、対話、引数の解釈、自動モード --auto）もここに定める。「フィーチャーの進捗を見せて」「worktree を破棄して」と言われたとき、または /gamekit-worktree と打たれたときにも使う。"
-argument-hint: "status | next --phase spec|coding|all | human-tasks [<フィーチャー>] | sync-status <フィーチャー> | abort <フィーチャー>"
+argument-hint: "status | next --phase spec|coding|all | human-tasks [<フィーチャー>] | deferred-tasks [<フィーチャー>] | sync-status <フィーチャー> | abort <フィーチャー>"
 compatibility: "Requires git and Python 3.9+, spec-kit project structure with .specify/ directory"
 user-invocable: true
 disable-model-invocation: false
@@ -31,10 +31,11 @@ python3 <skills>/gamekit-worktree/scripts/worktree_helper.py <command> ...
 | `$HELPER ensure <feature> --phase spec\|coding\|all` | S1 準備。worktree があれば再利用し、なければ `main` から作る |
 | `$HELPER state <feature> --phase spec\|coding\|all` | 変更せずに進捗を表示する |
 | `$HELPER checkpoint <feature> <step> "<subject>"` | worktree の変更をすべてコミットし、ステップの完了を記録する |
-| `$HELPER finish <feature> --phase spec\|coding\|all [--allow-unchecked] [--commit-leftovers] [--switch]` | S12 片付け。`main` に `--no-ff` でマージし、worktree とブランチを削除する。worktree の外で実行する |
+| `$HELPER finish <feature> --phase spec\|coding\|all [--allow-unchecked] [--commit-leftovers] [--switch] [--partial]` | S12 片付け。`main` に `--no-ff` でマージし、worktree とブランチを削除する。worktree の外で実行する。`--partial`（coding / all）は、最終ステップと未完了のタスクを確かめずに `merge(<feature>): partial` の件名でマージする（ほかの機能の前提として一部の Phase だけを先に入れるとき。進捗は進めない） |
 | `$HELPER abort <feature> [--yes]` | worktree とブランチを破棄する。`--yes` がなければ対象を表示するだけ |
 | `$HELPER list` | 全フィーチャー名を着手順（`spec_order.md` の並び、その後に番号順）で表示する |
 | `$HELPER status` | 全フィーチャーの仕様・実装・worktree の状況と、残っている人のタスク（`[人]`）の件数を表示する。Pull Request などで取り込んだフィーチャーは `main` の `tasks.md` の完了状況で、Spec Kit 以前に実装した機能（`specs/` がなく、機能ファイルの状態欄が `実装済み` か `完了`）は状態欄で判定する。worktree を使わずに `NNN-slug` のブランチで作業中のフィーチャーも表示する（この 2 種類は `next` の候補にしない） |
+| `$HELPER deferred-tasks [<feature>]` | 残っている後の段階のタスク（`[後]`）を一覧する。読む `tasks.md` は `human-tasks` と同じ |
 | `$HELPER human-tasks [<feature>]` | 残っている人のタスクを一覧する。worktree があればその `tasks.md`、なければ `main` のもの（メインの作業ツリーが `main` にいれば、コミット前の変更も含む）を読む |
 | `$HELPER sync-status <feature>` | `main` にマージ済みのフィーチャーの状態欄を、`tasks.md` に合わせて `完了` か `人の作業待ち` にする。`main` で実行し、変更はコミットしない |
 | `$HELPER next --phase spec\|coding\|all [--skip <feature,...>]` | 次に着手すべきフィーチャーを表示する（途中の worktree を優先。`--skip` で除外） |
@@ -64,9 +65,9 @@ NEXT_STEP: S4
 | `SPEC_MISSING` | spec・plan・tasks がどこにもない | `gamekit-feature` か `gamekit-all` を案内する |
 | `LEFTOVER_CHANGES` | `finish` で、worktree にどのステップのコミットにも含まれていない変更がある | 変更の一覧をユーザーに示す。マージに含めてよければ `--commit-leftovers` を付けて再実行する。含めない変更は、ユーザーの了承を得て取り除く |
 | `NOT_ON_MAIN` | `finish` で、メインの作業ツリーが `main` 以外のブランチにいる | 切り替えてよいかをユーザーに確認し、よければ `--switch` を付けて再実行する |
-| `UNCHECKED_TASKS` | `finish`（coding / all）で、`tasks.md` に `[人]` 以外の未完了のタスクが残っている | 未完了のタスクの一覧をユーザーに示す。実装するなら S8 の手順で片付けてから、残したままマージしてよいと確認できたら `--allow-unchecked` を付けて `finish` を再実行する |
+| `UNCHECKED_TASKS` | `finish`（coding / all）で、`tasks.md` に `[人]`・`[後]` 以外の未完了のタスクが残っている | 未完了のタスクの一覧をユーザーに示す。実装するなら S8 の手順で片付けてから、残したままマージしてよいと確認できたら `--allow-unchecked` を付けて `finish` を再実行する |
 
-`finish`（coding / all）は、未完了のタスクが `[人]` のものだけなら止めずにマージし、標準出力に `HUMAN_TASKS_PENDING: <件数>` と残りのタスクを出す。この一覧はユーザーに示し、§3「人のタスクの片付け」を案内する。
+`finish`（coding / all）は、未完了のタスクが `[人]`・`[後]` のものだけなら止めずにマージし、標準出力に `HUMAN_TASKS_PENDING: <件数>`・`DEFERRED_TASKS_PENDING: <件数>` と残りのタスクを出す。この一覧はユーザーに示し、§3「人のタスクの片付け」「後の段階のタスク」を案内する。
 
 ## 2. ステップ番号
 
@@ -126,7 +127,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 
 1. **worktree の外に出てから**、`$HELPER finish <FEATURE_NAME> --phase <phase>` を実行する（`cd "$REPO_ROOT"`。`REPO_ROOT` は `ensure` の出力にある）。worktree の中で実行すると、スクリプトは止まる。スクリプトは次を行う。
    - 担当範囲の最終ステップ（spec は S7-3、coding と all は S11）が完了していることを確かめる。
-   - coding と all では、`tasks.md` に未完了のタスクがないことを確かめる（`[人]` 以外があれば `UNCHECKED_TASKS` で止まる。`[人]` だけなら続けて、最後に `HUMAN_TASKS_PENDING` を出す）。
+   - coding と all では、`tasks.md` に未完了のタスクがないことを確かめる（`[人]`・`[後]` 以外があれば `UNCHECKED_TASKS` で止まる。`[人]`・`[後]` だけなら続けて、最後に `HUMAN_TASKS_PENDING`・`DEFERRED_TASKS_PENDING` を出す）。
    - worktree の残りの変更をコミットする。
    - メインの作業ツリーに未コミットの変更がないことを確かめ、`main` に切り替える。
    - `git merge --no-ff -m "merge(<FEATURE_NAME>): <phase>"` でマージする。ブランチがすでにマージ済み（競合を手で解消した後など）なら、マージを飛ばして片付けだけを行う。
@@ -150,6 +151,22 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 2. ユーザーが完了を伝えたら、そのタスクの「完了の確かめ方」で確かめられる部分を確かめ、`main` の `tasks.md` を `- [x]` にする。
 3. `$HELPER sync-status <FEATURE_NAME>` で状態欄を合わせる。人のタスクがなくなれば `完了` になる。
 4. `tasks.md` と機能ファイル、`docs/feature/README.md` の変更をまとめてコミットする（例: `docs(<FEATURE_NAME>): 人のタスクの完了を記録`）。
+
+### 後の段階のタスク
+
+`[後]` のタスクは、マージの後、その段階（「いつ: …」に書いたもの）が来たら片付ける。規則はプロジェクトの steering（「後の段階に回すタスク」）に従う。
+
+1. `$HELPER deferred-tasks [<FEATURE_NAME>]` で残りを示す。
+2. その段階が来たら `gamekit-coding <FEATURE_NAME>` で実装する（S8 からやり直さず、残りのタスクだけを実装してよい。`[後]` の印は、実装して `- [x]` にするときに外さなくてよい）。
+3. `$HELPER sync-status <FEATURE_NAME>` で状態欄を合わせる。
+
+### 一部だけを先にマージする（`--partial`）
+
+ほかの機能の前提として、この機能の一部の Phase だけを先に `main` に入れるときに使う（steering「ほかの機能の一部だけを先に作る」）。
+
+1. `gamekit-coding <FEATURE_NAME> --until "Phase N"` で、`tasks.md` のその Phase までを実装し、テストとゲートを通す。S8 の `checkpoint` は記録しない（S8 はまだ終わっていない）。区切りのコミットは trailer なしで作る。
+2. worktree の外で `$HELPER finish <FEATURE_NAME> --phase coding --partial` を実行する。件名は `merge(<FEATURE_NAME>): partial` で、進捗の判定には使わない。
+3. 残りは、後で `gamekit-coding <FEATURE_NAME>` を実行すれば、`main` から新しい worktree を作って S8 から続ける（済んだタスクは `- [x]` のまま）。
 
 ### 中止
 
@@ -205,6 +222,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 | `UNCHECKED_TASKS` | 未完了のタスクを S8 の手順で実装し、テストが通ったら `finish` を再実行する（`--allow-unchecked` は自動で付けない） |
 | S8 の `[人]` のタスク | 実行せず、`[x]` にもしない。手順を示して保留にし、依存しない後続のタスクを続ける。保留にしたタスクを完了報告に挙げる |
 | `HUMAN_TASKS_PENDING` | マージは済んでいる。残りの `[人]` のタスクを完了報告に挙げる（自動で完了にしない） |
+| `DEFERRED_TASKS_PENDING` | マージは済んでいる。残りの `[後]` のタスクを、いつ行うかと一緒に完了報告に挙げる |
 
 ### 自動モードでも止まる場面
 
@@ -239,7 +257,7 @@ S4-1、S4-2、S9-1 は、speckit の番号を変えないように枝番で差�
 ユーザーからこのスキルを直接呼ばれたときは、引数に応じて次を行う。
 
 - `status`（または引数なし）: `$HELPER status` の結果を表示し、途中の worktree があれば再開に使うスキルを案内する。人の作業が残っているフィーチャーがあれば、`human-tasks` での確認を案内する。
-- `human-tasks [<feature>]`: 結果を表示する。
+- `human-tasks [<feature>]`・`deferred-tasks [<feature>]`: 結果を表示する。
 - `sync-status <feature>`: §3「人のタスクの片付け」の手順に従う。
 - `next --phase <phase>`: 結果を表示する。
 - `abort <feature>`: §3「中止」の手順に従う。

@@ -69,6 +69,8 @@ TARGET_RE = re.compile(r"\*\*対象\*\*:\s*(UI あり|UI なし)")
 SCREEN_ID_RE = re.compile(r"\bSCR-(\d{3})-(\d{2})\b")
 SCREEN_ROW_RE = re.compile(r"^\|\s*(SCR-[^\s|]+)\s*\|")
 FR_RE = re.compile(r"\bFR-\d{3}\b")
+# spec.md で要件を定義している行（「- **FR-001**: …」）。ほかの仕様の要件への参照（「001 の FR-040」など）は数えない
+FR_DEF_RE = re.compile(r"^\s*[-*]\s*\*\*(FR-\d{3})\*\*", re.MULTILINE)
 FEATURE_DIR_RE = re.compile(r"^(\d{3})-[a-z0-9]+(-[a-z0-9]+)*$")
 TOKENS_FILE = "tokens.tokens.json"
 THEME_FILE_RE = re.compile(r"^tokens\.([a-z0-9-]+)\.tokens\.json$")
@@ -398,9 +400,13 @@ def check_feature(feature_dir: Path, project_target: str | None, project_screens
     spec_text = read(spec)
     if spec_text is None:
         return
-    spec_frs = set(FR_RE.findall(spec_text))
+    spec_defined = set(FR_DEF_RE.findall(spec_text))
+    # 定義の行が見つからない古い書き方の spec.md では、従来どおり出てくる FR をすべて要件とみなす
+    spec_frs = spec_defined or set(FR_RE.findall(spec_text))
+    spec_mentioned = set(FR_RE.findall(spec_text))
     ui_frs = set(FR_RE.findall(ui))
-    for fr in sorted(ui_frs - spec_frs):
+    # ui.md の FR が spec.md のどこにも出てこなければ誤り（参照として出てくるものは許す）
+    for fr in sorted(ui_frs - spec_mentioned):
         err(f"{ui_md}: 要件「{fr}」が spec.md にありません")
     for fr in sorted(spec_frs - ui_frs):
         warn(f"{ui_md}: spec.md の「{fr}」に対応する画面がありません（画面を伴わない要件なら無視してよい）")

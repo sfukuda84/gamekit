@@ -46,7 +46,7 @@ $ARGUMENTS
 | `docs/feature/NNN-<slug>.md` | 1 機能 1 ファイルの機能概要。様式は [templates/feature.md](./templates/feature.md) |
 | `docs/concept/backlog.md`（作成・更新） | 機能化しなかった候補（候補 / 却下）と機能化済みの記録。`gamekit-sparring` が作ったものがあればそれに足す。なければ [templates/backlog.md](./templates/backlog.md) で作る |
 
-終わったら、`gamekit-bootstrap` §3 の形で G10 を記録する（`docs(bootstrap): G10 機能に仕分け`、trailer `Gamekit-Bootstrap: G10`）。単独で実行したときも記録する。バックログモードでは記録しない（`docs(feature): BL-NNN を機能化` などの通常のコミットにする）。
+終わったら、`gamekit-bootstrap` §3 のコマンドで G10 を記録する（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G10 "docs(bootstrap): G10 機能に仕分け" --allow-empty`）。単独で実行したときも記録する。バックログモードでは記録しない（`docs(feature): BL-NNN を機能化` などの通常のコミットにする）。
 
 ## 2. 手順
 

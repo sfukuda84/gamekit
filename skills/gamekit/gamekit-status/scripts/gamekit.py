@@ -136,6 +136,45 @@ def bootstrap_state(root: Path) -> tuple[list[str], str]:
     return done, "DONE"
 
 
+def checkpoint_message(subject: str, step: str, trailers: list[str]) -> str:
+    """コミットのメッセージ。trailer はすべて最後の段落にまとめる（段落を分けると git は trailer として読まない）。"""
+    lines = [f"{BOOTSTRAP_TRAILER}: {step}"]
+    for t in trailers:
+        t = t.strip()
+        if not t:
+            continue
+        if ":" not in t:
+            raise GkError(f"--trailer は「キー: 値」の形で指定する（指定: {t}）")
+        lines.append(t)
+    return f"{subject.strip()}\n\n" + "\n".join(lines) + "\n"
+
+
+def cmd_checkpoint(root: Path, args: argparse.Namespace) -> int:
+    """ゲームの工程のステップの完了を記録する（git add -A してコミット。trailer Gamekit-Bootstrap: G<n>）。"""
+    step = args.step.strip().upper()
+    if step not in BOOTSTRAP_STEPS:
+        raise GkError(f"ステップ {args.step} は不正です（有効値: {' '.join(BOOTSTRAP_STEPS)}）")
+    if not gklib.is_git_repo(root):
+        raise GkError(f"{root} は git リポジトリではありません")
+    gklib.git(root, ["add", "-A"])
+    message = checkpoint_message(args.subject, step, args.trailer or [])
+    cmd = ["commit", "-q", "-F", "-"]
+    staged = gklib.git(root, ["diff", "--cached", "--quiet"], check=False).returncode != 0
+    if not staged:
+        if not args.allow_empty:
+            raise GkError("記録する変更がありません。変更がなくても完了を記録するなら --allow-empty を付ける")
+        cmd.append("--allow-empty")
+    proc = subprocess.run(["git", *cmd], cwd=str(root), input=message, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+    if proc.returncode != 0:
+        raise GkError(f"git commit が失敗しました: {proc.stderr.strip()}")
+    head = gklib.git(root, ["rev-parse", "--short", "HEAD"]).stdout.strip()
+    _, nxt = bootstrap_state(root)
+    out(f"CHECKPOINT: {step} {head}")
+    out(f"NEXT_STEP: {nxt}")
+    return 0
+
+
 def cmd_bootstrap(root: Path, args: argparse.Namespace) -> int:
     done, nxt = bootstrap_state(root)
     out(f"COMPLETED_STEPS: {' '.join(done)}")
@@ -262,7 +301,9 @@ def build_state(root: Path, cfg: dict, now: dt.datetime) -> str:
     _, status = run_helper(root, "status")
     lines += [status or "（フィーチャーなし）", "", "### 残っている人のタスク（[人]）", ""]
     _, human = run_helper(root, "human-tasks")
-    lines += [human or "（なし）", "", "### 見直しの優先度が「高」の自動判断", ""]
+    lines += [human or "（なし）", "", "### 後の段階に回したタスク（[後]）", ""]
+    _, deferred = run_helper(root, "deferred-tasks")
+    lines += [deferred or "（なし）", "", "### 見直しの優先度が「高」の自動判断", ""]
     decisions = high_priority_decisions(root, cfg)
     lines += [f"- {d}" for d in decisions] or ["（なし）"]
     lines += ["", "### 前回の引き継ぎ以降のコミット", ""]
@@ -405,13 +446,19 @@ def main() -> int:
     p.add_argument("action", choices=["get"])
     p.add_argument("key", nargs="?")
     sub.add_parser("bootstrap", help="ゲームの工程（G1〜G14）の進捗")
+    p = sub.add_parser("checkpoint", help="ゲームの工程のステップの完了を記録する（git add -A してコミット）")
+    p.add_argument("step", help="G1〜G14")
+    p.add_argument("subject", help="コミットの件名（例: docs(bootstrap): G1 種を作成）")
+    p.add_argument("--allow-empty", action="store_true", help="変更がなくても記録する")
+    p.add_argument("--trailer", action="append", help="ほかの trailer（例: 'Co-Authored-By: …'）。何度でも指定できる")
     sub.add_parser("status", help="ゲームの工程・機能・バランス・引き継ぎ書の状況")
     p = sub.add_parser("handover", help="引き継ぎ書を更新する（コミットしない）")
     p.add_argument("--note", default="")
     sub.add_parser("doctor", help="設定と環境の診断")
     args = ap.parse_args()
     root = Path(args.root).expanduser().resolve() if args.root else gklib.find_root()
-    handlers = {"init": cmd_init, "config": cmd_config, "bootstrap": cmd_bootstrap, "status": cmd_status,
+    handlers = {"init": cmd_init, "config": cmd_config, "bootstrap": cmd_bootstrap, "checkpoint": cmd_checkpoint,
+                "status": cmd_status,
                 "handover": cmd_handover, "doctor": cmd_doctor}
     try:
         return handlers[args.cmd](root, args)

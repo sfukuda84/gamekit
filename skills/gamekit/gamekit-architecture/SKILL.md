@@ -44,7 +44,7 @@ $ARGUMENTS
 | `docs/architecture.md` | 採用したエンジンと構成、技術スタック、データ駆動の方式、セーブ、決定性、テスト、比較した案と却下した理由、見直しの条件、出典。様式は [templates/architecture.md](./templates/architecture.md) |
 | `.gamekit/config.yaml` | `engine`、`language`、`paths.data`、`commands`（`test`、`lint`、`build`、`run_headless`、`balance_sim`） |
 
-終わったら、`gamekit-bootstrap` §3 の形で G8 を記録する（`docs(bootstrap): G8 エンジンと構成を選定`、trailer `Gamekit-Bootstrap: G8`）。単独で実行したときも記録する。見直しモードでは記録しない（`docs(architecture): <変更の要約>` の通常のコミットにする）。
+終わったら、`gamekit-bootstrap` §3 のコマンドで G8 を記録する（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G8 "docs(bootstrap): G8 エンジンと構成を選定" --allow-empty`）。単独で実行したときも記録する。見直しモードでは記録しない（`docs(architecture): <変更の要約>` の通常のコミットにする）。
 
 `docs/architecture.md` がすでにある場合は、**見直しモード**として §4 に従う。既存のプロジェクトに取り込んだ場合（`--adopt`）は、既存のエンジンとコードを読み、現状を記録する形で書く（§5）。
 

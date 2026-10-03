@@ -69,7 +69,7 @@ $ARGUMENTS
 | `specs/<NNN-name>/ui.md` | [templates/ui.md](./templates/ui.md)（§3） |
 | `.specify/memory/constitution.md` | `docs/design/` を参照する条項がなければ、`speckit-constitution` の手順で足す（§2 ステップ 6） |
 
-立ち上げと単独実行（§2）が終わったら、`gamekit-bootstrap` §3 の形で G13 を記録する（`docs(bootstrap): G13 見た目・画面・手触りを定義`、trailer `Gamekit-Bootstrap: G13`）。単独で実行したときも記録する。更新モード（§5）で直しただけのときは `docs(design): <変更の要約>` の通常のコミットにし、機能ごとの画面仕様（§3）は `gamekit-feature` の S4-1 のチェックポイントで記録する。
+立ち上げと単独実行（§2）が終わったら、`gamekit-bootstrap` §3 のコマンドで G13 を記録する（`python3 <skills>/gamekit-status/scripts/gamekit.py checkpoint G13 "docs(bootstrap): G13 見た目・画面・手触りを定義" --allow-empty`）。単独で実行したときも記録する。更新モード（§5）で直しただけのときは `docs(design): <変更の要約>` の通常のコミットにし、機能ごとの画面仕様（§3）は `gamekit-feature` の S4-1 のチェックポイントで記録する。
 
 `docs/design/` がすでにある場合は、**更新モード**として §5 に従う。
 

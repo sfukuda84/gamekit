@@ -63,7 +63,7 @@ inclusion: always
 
 ### 共通
 
-- `gamekit-status`: 進捗の確認（ゲームの工程と機能の工程）、引き継ぎ書（`docs/handover/`）、環境の診断。
+- `gamekit-status`: 進捗の確認（ゲームの工程と機能の工程）、引き継ぎ書（`docs/handover/`）、環境の診断、ゲームの工程の記録（`gamekit.py checkpoint G<n>`）。
 - `gamekit-balance`: 調整仕様（S4-2）、バランス検証（S9-1）のほか、単独でシミュレーションの準備、基準値の記録、差分の確認に使う。
 - `gamekit-review`: 5 軸のレビュー。機能の工程の外で、任意の差分のレビューにも使う。
 
@@ -89,6 +89,19 @@ inclusion: always
 - 署名鍵、証明書、API キーなどの秘密情報の作成と入力。
 
 AI は `[人]` のタスクを実行せず、自動モードでも `- [x]` にしない。プレイ確認の結果は、人が `docs/playtest/<YYYYMMDD>-<対象>.md` に書くか、AI に伝えて書き写してもらう。結果から設計を直すときは、原則 6 に従う。
+
+## 後の段階に回すタスク（`[後]`）
+
+垂直スライスに要らない分、ほかの機能の実装を待つ分など、**この機能のマージの後に、別の段階で行うと決めたタスク**には `[後]` を付ける。書式は `[人]` と同じで、印は `[Story]` の後、末尾に「（いつ: 003 の前 / 公開時 / 001 の実装の後 など）」を書く。
+
+- `[後]` にするのは、仕様（spec.md の Assumptions や Clarifications）で段階を分けると決めたタスクだけにする。実装が間に合わなかったタスクを `[後]` にしない（その場合は `--allow-unchecked` の確認を経る）。
+- `gamekit-worktree` の `finish` は、未完了が `[人]`・`[後]` だけなら止めずにマージし、`DEFERRED_TASKS_PENDING` で残りを示す。機能ファイルの状態は `完了（後の作業 N 件）` になる（`[人]` が残れば `人の作業待ち`）。
+- `speckit-converge`・`speckit-analyze`・`gamekit-review` は、未完了の `[後]` のタスクを実装漏れや不整合として扱わない。そのタスクと重なる新しいタスクも足さない。
+- 残りは `$HELPER deferred-tasks` と `gamekit-status` で確かめ、その段階が来たら `gamekit-coding <機能>` で片付ける（`- [x]` にして `sync-status` で状態を合わせる）。
+
+## ほかの機能の一部だけを先に作る（`--until`・`--partial`）
+
+ある機能の前提として、別の機能の一部（例: 001 の Phase 1 の品質ゲート）だけを先に入れたいときは、`gamekit-coding <機能> --until "Phase N"` で、`tasks.md` のその Phase までを実装して止め、`$HELPER finish <機能> --phase coding --partial` で `main` に入れる。件名は `merge(<機能>): partial` になり、その機能の進捗（S8 以降）は進まない。残りは後で同じ `gamekit-coding <機能>` で続ける（S8 から）。`status` の実装の列に「一部をマージ済み」と出る。
 
 ## モード
 
